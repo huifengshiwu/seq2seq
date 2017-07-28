@@ -8,7 +8,6 @@ use_lstm: True
 data_dir: experiments/BTEC_speech/data
 model_dir: experiments/BTEC_speech/baseline_new
 train_prefix: train.concat.shuf  # Michel, Philippe, Loic, Marion, Helene, Fabienne
-dev_prefix: dev.Agnes            # different speaker
 max_train_size: 20000
 
 optimizer: adam

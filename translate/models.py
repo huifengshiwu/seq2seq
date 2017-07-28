@@ -538,7 +538,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             input_ = tf.concat([input_, context], axis=1)
         input_size = input_.get_shape()[1].value
 
-        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else None
+        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else False
         with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
             try:
                 _, new_state = get_cell(input_size)(input_, state)
@@ -628,9 +628,6 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
                               activation=tf.nn.tanh)
 
-        if decoder.update_first and not decoder.rnn_feed_attn and not decoder.conditional_rnn:
-            initial_state = update(initial_state, initial_input, context=None, symbol=None)
-
     initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
     initial_state, initial_pos, initial_weights = tf.split(initial_data, [state_size, 1, -1], axis=1)
     initial_state.set_shape([None, state_size])
@@ -640,6 +637,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         if decoder.conditional_rnn:
             with tf.variable_scope('conditional_1'):
                 state = update(state, input_)
+        elif decoder.update_first:
+            state = update(state, input_, None, input_symbol)
 
         context, new_weights = look(state, input_, pos=pos, prev_weights=prev_weights)
 
@@ -672,7 +671,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         states = states.write(time, state)
         outputs = outputs.write(time, output_)
 
-        if not decoder.conditional_rnn and decoder.generate_first:
+        if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
             state = update(state, input_, context, predicted_symbol)
 
         return (time + 1, input_, predicted_symbol, pos, state, outputs, states, weights, attns, new_weights,

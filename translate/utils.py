@@ -28,9 +28,10 @@ _NONE = '<NONE>'
 
 _START_VOCAB = [_BOS, _EOS, _UNK, _KEEP, _DEL, _INS, _SUB, _NONE]
 
-BOS_ID = 0
-EOS_ID = 1
-UNK_ID = 2
+BOS_ID = 1
+EOS_ID = 2
+UNK_ID = 3
+
 KEEP_ID = 3
 DEL_ID = 4
 INS_ID = 5

@@ -65,21 +65,8 @@ scripts/speech/audio-features-cat.py ${data_dir}/train.{Helene,Fabienne,Loic,Mar
 cat ${data_dir}/train.{fr,fr,fr,fr,fr,fr} > ${data_dir}/train.concat.fr
 cat ${data_dir}/train.{en,en,en,en,en,en} > ${data_dir}/train.concat.en
 
-# symbolic links for back-compatibility (default speaker is Agnes)
-cur_dir=`pwd`
-cd ${data_dir}
-ln -s train.Agnes.feats41 train.feats41
-ln -s dev.Agnes.feats41 dev.feats41
-ln -s test1.Agnes.feats41 test1.feats41
-ln -s test2.Agnes.feats41 test2.feats41
-ln -s dev.en dev.Agnes.en
-cd ${cur_dir}
+cp ${data_dir}/dev.Agnes.feats41 ${data_dir}/dev.feats41
+cp ${data_dir}/test1.Agnes.feats41 ${data_dir}/test1.feats41
+cp ${data_dir}/test2.Agnes.feats41 ${data_dir}/test2.feats41
 
-# samples for debugging
-head -n 100 ${data_dir}/dev.en > ${data_dir}/dev.100.en
-head -n 100 ${data_dir}/dev.fr > ${data_dir}/dev.100.fr
-scripts/speech/audio-features-head.py -n100 ${data_dir}/dev.Agnes.feats41 ${data_dir}/dev.100.Agnes.feats41
-
-head -n 1000 ${data_dir}/train.en > ${data_dir}/train.1000.en
-head -n 1000 ${data_dir}/train.fr > ${data_dir}/train.1000.fr
-scripts/speech/audio-features-head.py -n1000 ${data_dir}/train.Agnes.feats41 ${data_dir}/train.1000.Agnes.feats41
+scripts/speech/audio-features-shuf.py ${data_dir}/train.{concat,concat.shuf}.feats41 --input-txt ${data_dir}/train.concat.{fr,en} --output-txt ${data_dir}/train.concat.shuf.{fr,en}
