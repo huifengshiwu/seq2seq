@@ -41,12 +41,14 @@ use_dropout: False
 # initialization parameters
 weight_scale: null       # if null, initialize weights to TF defaults, otherwise to normal distribution with this stdev
 initializer: null        # if 'uniform' initialize uniformly between [-weight_scale, +weight_scale] instead
+orthogonal_init: True    # initialize recurrent connections with an orthogonal matrix
 
 # batch iteration parameters
 batch_size: 80           # batch size (during training and greedy decoding)
 batch_mode: standard     # standard (cycle through train set) or random (sample from train set)
 shuffle: True            # shuffle dataset at each new epoch
 read_ahead: 10           # number of batches to read ahead and sort by sequence length (can speed up training)
+reverse_input: False
 
 # reinforce parameters
 loss_function: xent            # 'xent' or 'reinforce'

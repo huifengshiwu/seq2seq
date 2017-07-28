@@ -609,6 +609,7 @@ variable_mapping = [   # map old names to new names (for backward compatibility 
     (r'/biases', r'/bias'),
     (r'/Matrix', r'/kernel'),
     (r'/Bias', r'/bias'),
+    (r'/softmax/', r'/softmax1/'),
 ]
 
 reverse_mapping = [   # map new names to old names

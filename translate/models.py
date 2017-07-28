@@ -204,7 +204,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     time_pooling=encoder.time_pooling, pooling_avg=encoder.pooling_avg,
                     **parameters)
 
-                initializer = CellInitializer(encoder.cell_size)
+                initializer = CellInitializer(encoder.cell_size) if encoder.orthogonal_init else None
                 with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
                     try:
                         encoder_outputs_, _, backward_states = rnn(reuse=False)
@@ -538,7 +538,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             input_ = tf.concat([input_, context], axis=1)
         input_size = input_.get_shape()[1].value
 
-        initializer = CellInitializer(decoder.cell_size)
+        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else False
         with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
             try:
                 _, new_state = get_cell(input_size)(input_, state)
@@ -577,7 +577,12 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         else:
             if decoder.pred_maxout_layer:
                 output_ = dense(output_, decoder.cell_size, use_bias=True, name='maxout')
-                output_ = tf.maximum(*tf.split(output_, num_or_size_splits=2, axis=1))
+                if decoder.old_maxout:  # for back-compatibility with old models
+                    output_ = tf.nn.pool(tf.expand_dims(output_, axis=2), window_shape=[2], pooling_type='MAX',
+                                         padding='SAME', strides=[2])
+                    output_ = tf.squeeze(output_, axis=2)
+                else:
+                    output_ = tf.maximum(*tf.split(output_, num_or_size_splits=2, axis=1))
 
             if decoder.pred_embed_proj:
                 # intermediate projection to embedding size (before projecting to vocabulary size)
@@ -623,8 +628,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
                               activation=tf.nn.tanh)
 
-    if decoder.update_first and not decoder.rnn_feed_attn and not decoder.conditional_rnn:
-        initial_state = update(initial_state, initial_input, context=None, symbol=None)
+        if decoder.update_first and not decoder.rnn_feed_attn and not decoder.conditional_rnn:
+            initial_state = update(initial_state, initial_input, context=None, symbol=None)
 
     initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
     initial_state, initial_pos, initial_weights = tf.split(initial_data, [state_size, 1, -1], axis=1)
@@ -873,7 +878,7 @@ def sequence_loss(logits, targets, weights, average_across_timesteps=False, aver
     log_perp = tf.reduce_sum(crossent * weights, axis=1)
 
     if average_across_timesteps:
-        total_size = tf.reduce_sum(weights, axis=0)
+        total_size = tf.reduce_sum(weights, axis=1)
         total_size += 1e-12  # just to avoid division by 0 for all-0 weights
         log_perp /= total_size
 

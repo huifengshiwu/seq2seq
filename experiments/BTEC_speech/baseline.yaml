@@ -55,3 +55,4 @@ use_dropout: True
 rnn_input_dropout: 0.5
 initial_state_dropout: 0.5
 input_layer_dropout: 0.5
+reverse_input: True

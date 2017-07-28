@@ -13,7 +13,7 @@ class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, use_dropout=False,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False,
                  len_normalization=1.0, name=None, chained_encoders=False, pred_edits=False, baseline_step=None,
-                 use_baseline=True, **kwargs):
+                 use_baseline=True, reverse_input=False, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.name = name
@@ -26,6 +26,7 @@ class Seq2SeqModel(object):
         self.max_output_len = [decoder.max_len for decoder in decoders]
         self.max_input_len = [encoder.max_len for encoder in encoders]
         self.len_normalization = len_normalization
+        self.reverse_input = reverse_input
 
         dropout_on = []
         dropout_off = []
@@ -380,9 +381,12 @@ class Seq2SeqModel(object):
 
                 eos = 0 if encoder.binary else 1   # end of sentence marker for non-binary input
                 encoder_pad = [pad_symbol] * (eos + max_input_len[i] - len(src_sentence))
+
+                if self.reverse_input:
+                    src_sentence = src_sentence[::-1]
+
                 inputs[i].append(src_sentence + encoder_pad)
                 input_length[i].append(len(src_sentence) + eos)
-                # inputs[i].append(src_sentence[::-1] + encoder_pad)  # reverse sequence
 
             for i in range(len(targets)):
                 if decoding:
