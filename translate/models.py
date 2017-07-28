@@ -538,7 +538,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             input_ = tf.concat([input_, context], axis=1)
         input_size = input_.get_shape()[1].value
 
-        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else False
+        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else None
         with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
             try:
                 _, new_state = get_cell(input_size)(input_, state)
