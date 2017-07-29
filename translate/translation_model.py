@@ -211,17 +211,15 @@ class TranslationModel:
             _, weights = self.seq2seq_model.step(sess, data=[token_ids], forward_only=True, align=True,
                                                  update_model=False)
 
-            trg_vocab = self.trg_vocab[0]      # FIXME
+            trg_vocab = self.trg_vocab[0]
             trg_token_ids = token_ids[len(self.src_ext)]
             trg_tokens = [trg_vocab.reverse[i] if i < len(trg_vocab.reverse) else utils._UNK for i in trg_token_ids]
 
             weights = weights.squeeze()
             max_len = weights.shape[1]
 
-            utils.debug(weights)
-
-            trg_tokens.append(utils._EOS)
             src_tokens = lines[align_encoder_id].split()[:max_len - 1] + [utils._EOS]
+            trg_tokens = trg_tokens[:weights.shape[0] - 1] + [utils._EOS]
 
             output_file = '{}.{}.svg'.format(output, line_id + 1) if output is not None else None
 

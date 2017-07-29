@@ -161,6 +161,8 @@ def main(args=None):
         if config.weight_scale:
             if config.initializer == 'uniform':
                 initializer = tf.random_uniform_initializer(minval=-config.weight_scale, maxval=config.weight_scale)
+            elif config.initializer == 'uniform_unit_scaling':
+                initializer = tf.uniform_unit_scaling_initializer()
             else:
                 initializer = tf.random_normal_initializer(stddev=config.weight_scale)
         else:

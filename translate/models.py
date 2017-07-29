@@ -1,4 +1,5 @@
 import tensorflow as tf
+import math
 from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, RNNCell
 from tensorflow.contrib.rnn import MultiRNNCell, GRUCell
 from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer
@@ -77,8 +78,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             continue
         # inputs are token ids, which need to be mapped to vectors (embeddings)
         embedding_shape = [encoder.vocab_size, encoder.embedding_size]
-        # initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
-        initializer = None
+
+        if encoder.embedding_initializer == 'sqrt3':
+            initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
+        else:
+            initializer = None
 
         device = '/cpu:0' if encoder.embeddings_on_cpu else None
         with tf.device(device):  # embeddings can take a very large amount of memory, so
@@ -128,11 +132,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.input_layers:
                 for j, layer_size in enumerate(encoder.input_layers):
-                    if encoder.use_dropout:
-                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)
-
                     encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=tf.tanh, use_bias=True,
                                             name='layer_{}'.format(j))
+                    if encoder.use_dropout:
+                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)
 
             if encoder.convolutions:
                 if encoder.binary:
@@ -487,10 +490,14 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     assert not decoder.pred_maxout_layer or decoder.cell_size % 2 == 0, 'cell size must be a multiple of 2'
 
     embedding_shape = [decoder.vocab_size, decoder.embedding_size]
+    if decoder.embedding_initializer == 'sqrt3':
+        initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
+    else:
+        initializer = None
 
     device = '/cpu:0' if decoder.embeddings_on_cpu else None
     with tf.device(device):
-        embedding = get_variable('embedding_{}'.format(decoder.name), shape=embedding_shape)
+        embedding = get_variable('embedding_{}'.format(decoder.name), shape=embedding_shape, initializer=initializer)
 
     def embed(input_):
         return tf.nn.embedding_lookup(embedding, input_)
@@ -538,7 +545,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             input_ = tf.concat([input_, context], axis=1)
         input_size = input_.get_shape()[1].value
 
-        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else False
+        initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else None
         with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
             try:
                 _, new_state = get_cell(input_size)(input_, state)
@@ -697,7 +704,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
     # put batch_size as first dimension
     outputs = tf.transpose(outputs, perm=(1, 0, 2))
-    weights = tf.transpose(weights[1:], perm=(1, 0, 2))
+    weights = tf.transpose(weights, perm=(1, 0, 2))
     states = tf.transpose(states, perm=(1, 0, 2))
     attns = tf.transpose(attns, perm=(1, 0, 2))
     samples = tf.transpose(samples)

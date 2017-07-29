@@ -558,3 +558,19 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
         plt.show()
     else:
         plt.savefig(output_file)
+
+
+def alignment_to_text(xlabels=None, ylabels=None, weights=None, output_file=None):
+    """
+    :param xlabels: input words
+    :param ylabels: output words
+    :param weights: numpy array of shape (len(xlabels), len(ylabels))
+    :param output_file: write the matrix in this file
+    """
+    with open(output_file.replace('svg', 'txt').replace('jpg', 'txt'), 'w') as output_file:
+        output_file.write(' \t' + '\t'.join(xlabels) + '\n')
+        for i in range(len(ylabels)):
+            output_file.write(ylabels[i])
+            for j in range(len(xlabels)):
+                output_file.write('\t' + str(weights[i][j]))
+            output_file.write('\n')
