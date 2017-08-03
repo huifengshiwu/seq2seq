@@ -41,7 +41,7 @@ use_dropout: False
 # initialization parameters
 weight_scale: null       # if null, initialize weights to TF defaults, otherwise to normal distribution with this stdev
 initializer: null        # if 'uniform' initialize uniformly between [-weight_scale, +weight_scale] instead
-orthogonal_init: True    # initialize recurrent connections with an orthogonal matrix
+orthogonal_init: False   # initialize recurrent connections with an orthogonal matrix
 
 # batch iteration parameters
 batch_size: 80           # batch size (during training and greedy decoding)
@@ -68,6 +68,7 @@ layers: 1                # number of RNN layers per encoder and decoder
 use_lstm: False          # use LSTM units instead of GRU units
 character_level: False   # character-level sequences
 max_len: 50              # max length of the input and output sequences (strongly affects speed and memory usage)
+truncate_lines: True     # if True truncate lines which are too long, otherwise just drop them
 
 # encoder settings
 bidir: True              # use bidirectional encoders

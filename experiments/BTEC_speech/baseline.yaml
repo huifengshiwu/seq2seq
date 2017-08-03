@@ -4,7 +4,6 @@ description: "multi-speaker baseline on BTEC, same configuration as Berard et al
 data_dir: experiments/BTEC_speech/data
 model_dir: experiments/BTEC_speech/baseline
 train_prefix: train.concat.shuf  # Michel, Philippe, Loic, Marion, Helene, Fabienne
-max_train_size: 20000
 
 optimizer: adam
 learning_rate: 0.001
@@ -12,7 +11,6 @@ batch_size: 64
 batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 5.0
-initializer: uniform_unit_scaling
 
 steps_per_checkpoint: 1000
 steps_per_eval: 1000
@@ -57,4 +55,3 @@ rnn_input_dropout: 0.5
 initial_state_dropout: 0.5
 input_layer_dropout: 0.5
 reverse_input: True
-orthogonal_init: False

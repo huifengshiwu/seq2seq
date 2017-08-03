@@ -17,7 +17,7 @@ from subprocess import Popen, PIPE
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, score_function='corpus_scores', name=None, ref_ext=None,
-                 pred_edits=False, dual_output=False, binary=None, **kwargs):
+                 pred_edits=False, dual_output=False, binary=None, truncate_lines=True, **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
@@ -47,7 +47,11 @@ class TranslationModel:
 
         self.max_input_len = [encoder.max_len for encoder in encoders]
         self.max_output_len = [decoder.max_len for decoder in decoders]
-        self.max_len = dict(zip(self.extensions, self.max_input_len + self.max_output_len))
+
+        if truncate_lines:
+            self.max_len = None   # we let seq2seq.get_batch handle long lines (by truncating them)
+        else:  # the line reader will drop lines that are too long
+            self.max_len = dict(zip(self.extensions, self.max_input_len + self.max_output_len))
 
         self.learning_rate = tf.Variable(learning_rate, trainable=False, name='learning_rate', dtype=tf.float32)
         self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * learning_rate_decay_factor)
