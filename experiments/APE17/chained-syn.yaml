@@ -55,6 +55,5 @@ initial_state_dropout: 0.5
 chained_encoders: True
 chaining_strategy: map_attns
 chaining_non_linearity: True
-chaining_bias: True
 chaining_loss_ratio: 0.5
 chaining_stop_gradient: False

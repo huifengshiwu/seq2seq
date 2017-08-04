@@ -122,6 +122,9 @@ class Seq2SeqModel(object):
         return opt, sgd_opt
 
     def get_update_op(self, loss, opts, global_step=None, max_gradient_norm=None, freeze_variables=None):
+        if loss is None:
+            return None
+
         freeze_variables = freeze_variables or []
 
         # compute gradient only for variables that are not frozen
