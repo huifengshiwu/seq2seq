@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-raw_data=experiments/APE17/raw_data
-data_dir=experiments/APE17/data_2017
+raw_data=raw_data/APE17
+data_dir=data/APE17
 
 max_vocab_size=30000
 max_char_vocab_size=200

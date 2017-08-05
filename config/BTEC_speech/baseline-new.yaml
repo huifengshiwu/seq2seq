@@ -5,8 +5,8 @@ cell_size: 256
 attn_size: 256
 use_lstm: True
 
-data_dir: experiments/BTEC_speech/data
-model_dir: experiments/BTEC_speech/baseline_new
+data_dir: data/BTEC_speech
+model_dir: models/BTEC_speech/baseline_new
 train_prefix: train.concat.shuf  # Michel, Philippe, Loic, Marion, Helene, Fabienne
 max_train_size: 20000
 

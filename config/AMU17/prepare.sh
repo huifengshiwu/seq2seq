@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-main_dir=experiments/AMU17
-raw_data=/mnt/local/data/raw/APE_EN_DE
-data_dir=${main_dir}/data
+raw_data=raw_data/APE17
+data_dir=data/AMU17
 
 mkdir -p ${data_dir}
 

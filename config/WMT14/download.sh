@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-raw_data=data/raw
+raw_data=raw_data/WMT14
 
 mkdir -p ${raw_data}
 cur_dir=`pwd`

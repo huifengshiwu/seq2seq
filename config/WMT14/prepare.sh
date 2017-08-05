@@ -2,8 +2,8 @@
 
 # NMT model using filtered WMT14 data, available on http://www-lium.univ-lemans.fr/~schwenk/nnmt-shared-task/
 
-raw_data=data/raw
-data_dir=experiments/WMT14/data
+raw_data=raw_data/WMT14
+data_dir=data/WMT14
 
 rm -rf ${data_dir}
 mkdir -p ${data_dir}

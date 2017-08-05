@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-model_dir=experiments/BTEC_speech
+model_dir=models/BTEC_speech
 ensemble_dir=${model_dir}/ensemble
 
 mkdir -p ${ensemble_dir}

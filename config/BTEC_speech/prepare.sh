@@ -4,10 +4,10 @@
 # this script assumes that the BTEC raw files (btec-{train, dev-concat, test1, test2}.{fr,en,mref.en})
 # are in ${raw_data_dir}
 # and the Voxygen credentials (wsclient.cred) are in experiments/btec_speech/voxygen
-raw_data_dir=data/raw/btec.fr-en
-raw_audio_dir=${raw_data_dir}/speech_fr
+raw_data_dir=raw_data/BTEC
+raw_audio_dir=raw_data/BTEC_speech
 speech_dir=experiments/BTEC_speech
-data_dir=${speech_dir}/data   # output directory for the processed files (text and audio features)
+data_dir=data/BTEC_speech   # output directory for the processed files (text and audio features)
 
 mkdir -p ${raw_audio_dir} ${data_dir}
 

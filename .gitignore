@@ -25,11 +25,13 @@ var/
 *.log
 .ipynb_checkpoints
 
-data/
+data_*
+data
+raw_data
 tmp/
 .idea/
-models/
-model/
+models
+model
 .spyderproject
 wsclient.cred
 *.svg

@@ -9,8 +9,8 @@ use_lstm: True
 
 weight_scale: 0.1
 
-data_dir: experiments/APE17/data_2017
-model_dir: experiments/APE17/models/forced
+data_dir: data/APE17
+model_dir: models/APE17/global
 
 batch_size: 32
 
@@ -31,8 +31,7 @@ read_ahead: 10
 
 encoders:
   - name: mt
-    attention_type: local
-    attn_window_size: 0
+    attention_type: global
     max_len: 37
 
 decoders:

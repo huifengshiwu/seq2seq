@@ -9,8 +9,8 @@ bidir: True
 use_lstm: True
 weight_scale: 0.1
 
-data_dir: data/btec
-model_dir: models/btec_baseline
+data_dir: data/BTEC
+model_dir: models/BTEC
 batch_size: 32
 
 optimizer: adam

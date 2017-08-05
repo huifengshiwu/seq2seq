@@ -6,8 +6,8 @@
 # https://arxiv.org/abs/1605.04800:   merges two mono-source models, lots of additional (parallel data), creates
 # synthetic PE data by using back-translation
 
-raw_data=experiments/APE17/raw_data
-data_dir=experiments/APE17/data_2016
+raw_data=raw_data/APE17
+data_dir=data/APE16
 
 max_vocab_size=30000
 max_char_vocab_size=200

@@ -7,9 +7,9 @@ embedding_size: 512
 bidir: True
 use_lstm: False
 
-data_dir: experiments/AMU17/data
+data_dir: data/AMU17
 max_len: 50
-model_dir: experiments/AMU17/models/baseline
+model_dir: models/AMU17/baseline
 
 steps_per_checkpoint: 5000
 steps_per_eval: 5000
