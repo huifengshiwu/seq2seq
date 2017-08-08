@@ -18,8 +18,8 @@ min_learning_rate: 0.000001 # stop training when learning rate is smaller than t
 
 # training parameters
 max_gradient_norm: 5.0   # clip gradients to this norm (prevents exploding gradient)
-steps_per_checkpoint: 1000   # number of SGD updates between each checkpoint
-steps_per_eval: 1000     # number of SGD updates between each BLEU eval (on dev set)
+steps_per_checkpoint: 10000   # number of SGD updates between each checkpoint
+steps_per_eval: 10000    # number of SGD updates between each BLEU eval (on dev set)
 eval_burn_in: 0          # minimum number of updates before starting BLEU eval
 max_steps: 0             # maximum number of updates before stopping
 max_epochs: 0            # maximum number of epochs before stopping
@@ -48,7 +48,7 @@ batch_size: 80           # batch size (during training and greedy decoding)
 batch_mode: standard     # standard (cycle through train set) or random (sample from train set)
 shuffle: True            # shuffle dataset at each new epoch
 read_ahead: 10           # number of batches to read ahead and sort by sequence length (can speed up training)
-reverse_input: False
+reverse_input: False     # reverse input sequences
 
 # reinforce parameters
 loss_function: xent            # 'xent' or 'reinforce'
@@ -137,7 +137,7 @@ freeze_variables: []     # list of variables to freeze during training
 log_file: log.txt        # log to this file in addition to standard output
 parallel_iterations: 16  # parameter of the decoder's while loop (trade-off speed / memory usage)
 swap_memory: True        # parameter of the decoder's while loop (more flexible memory management)
-max_to_keep: 1           # keep that many latest checkpoints
+max_to_keep: 1           # keep that many latest checkpoints (null for unlimited)
 keep_every_n_hours: 0    # keep checkpoints every n hours
 embeddings_on_cpu: True  # save embeddings on main memory instead of GPU memory
 

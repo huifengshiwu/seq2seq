@@ -11,8 +11,8 @@ data_dir: data/WMT14
 max_len: 50
 model_dir: models/WMT14/baseline_legacy
 
-steps_per_checkpoint: 4000
-steps_per_eval: 4000
+steps_per_checkpoint: 10000
+steps_per_eval: 10000
 score_function: corpus_bleu
 keep_best: 8
 

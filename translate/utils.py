@@ -258,7 +258,7 @@ def read_dataset(paths, extensions, vocabs, max_size=None, character_level=None,
             break
 
     debug('files: {}'.format(' '.join(paths)))
-    debug('size: {}'.format(len(data_set)))
+    debug('lines reads: {}'.format(len(data_set)))
 
     if sort_by_length:
         data_set.sort(key=lambda lines: list(map(len, lines)))
@@ -360,11 +360,14 @@ def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, cha
     batch_iterator = functools.partial(read_ahead_batch_iterator, batch_size=batch_size, read_ahead=read_ahead,
                                        shuffle=shuffle, mode=mode)
 
-    shard, position = read_shard()
+    with open(paths[-1]) as f:   # count lines
+        line_count = sum(1 for _ in f)
+        debug('total line count: {}'.format(line_count))
 
-    if not max_size or len(shard) < max_size:
+    shard, position = read_shard()
+    if not max_size or line_count <= max_size:
         # training set is small enough to fit entirely into memory (single shard)
-        return batch_iterator(shard), len(shard)
+        return batch_iterator(shard), line_count
     else:
         batch_iterator = functools.partial(batch_iterator, cycle=False)
 
@@ -383,7 +386,7 @@ def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, cha
                         shard, position = read_shard(from_position=position)
                         break
 
-        return generator(position, shard), max_size
+        return generator(position, shard), line_count
 
 
 def get_batches(data, batch_size, batches=0, allow_smaller=True):

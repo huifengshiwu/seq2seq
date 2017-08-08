@@ -452,7 +452,7 @@ class TranslationModel:
             if decay_every_n_epoch is not None and (self.batch_size * (global_step - self.training.last_decay)
                                                     >= decay_every_n_epoch * self.train_size):
                 sess.run(self.learning_rate_decay_op)
-                utils.debug('  decaying learning rate to: {:.4f}'.format(self.learning_rate.eval()))
+                utils.debug('  decaying learning rate to: {:.3g}'.format(self.learning_rate.eval()))
                 self.training.last_decay = global_step
 
         if sgd_after_n_epoch is not None and epoch >= sgd_after_n_epoch:
@@ -468,7 +468,7 @@ class TranslationModel:
             baseline_loss = self.training.baseline_loss / self.training.steps
             step_time = self.training.time / self.training.steps
 
-            summary = 'step {} epoch {} learning rate {:.4f} step-time {:.4f} loss {:.4f}'.format(
+            summary = 'step {} epoch {} learning rate {:.3g} step-time {:.3f} loss {:.3f}'.format(
                 global_step, epoch + 1, self.learning_rate.eval(), step_time, loss)
 
             if self.name is not None:
