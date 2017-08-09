@@ -13,7 +13,7 @@ class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, use_dropout=False,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False,
                  len_normalization=1.0, name=None, chained_encoders=False, pred_edits=False, baseline_step=None,
-                 use_baseline=True, reverse_input=False, **kwargs):
+                 use_baseline=True, reverse_input=False, moving_average=None, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.name = name
@@ -93,7 +93,7 @@ class Seq2SeqModel(object):
         #self.beam_outputs = [models.softmax(outputs_[:, 0, :]) for outputs_ in self.outputs]
         self.beam_output = models.softmax(self.outputs[0][:, 0, :])
 
-        optimizers = self.get_optimizers(optimizer, learning_rate)
+        optimizers = self.get_optimizers(optimizer, learning_rate, moving_average)
 
         if not decode_only:
             get_update_ops = functools.partial(self.get_update_op, opts=optimizers,
@@ -108,7 +108,7 @@ class Seq2SeqModel(object):
                 self.update_ops['baseline'] = get_update_ops(self.baseline_loss, global_step=self.baseline_step)
 
     @staticmethod
-    def get_optimizers(optimizer_name, learning_rate):
+    def get_optimizers(optimizer_name, learning_rate, moving_average):
         sgd_opt = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
 
         if optimizer_name.lower() == 'adadelta':

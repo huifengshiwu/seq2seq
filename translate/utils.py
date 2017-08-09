@@ -238,7 +238,7 @@ def read_dataset(paths, extensions, vocabs, max_size=None, character_level=None,
 
     for inputs, positions in line_reader:
         if len(data_set) > 0 and len(data_set) % 100000 == 0:
-            log("  lines read {}".format(len(data_set)))
+            debug("  lines read: {}".format(len(data_set)))
 
         lines = [
             input_ if binary_ else

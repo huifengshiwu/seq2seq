@@ -26,6 +26,7 @@ max_epochs: 0            # maximum number of epochs before stopping
 keep_best: 4             # number of best checkpoints to keep (based on BLEU score on dev set)
 feed_previous: 0.0       # randomly feed prev output instead of ground truth to decoder during training ([0,1] proba)
 optimizer: adam          # which training algorithm to use ('sgd', 'adadelta', or 'adam')
+moving_average: null     # TODO
 
 # dropout
 pervasive_dropout: False

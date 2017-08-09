@@ -210,23 +210,9 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 initializer = CellInitializer(encoder.cell_size) if encoder.orthogonal_init else None
                 with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
                     try:
-                        encoder_outputs_, _, backward_states = rnn(reuse=False)
+                        encoder_outputs_, _, encoder_states_ = rnn(reuse=False)
                     except ValueError:   # Multi-task scenario where we're reusing the same RNN parameters
-                        encoder_outputs_, _, backward_states = rnn(reuse=True)
-
-                if encoder.final_state == 'concat_last':
-                    # concats last states of all backward layers (full LSTM states)
-                    encoder_state_ = tf.concat(backward_states, axis=1)
-                elif encoder.final_state == 'average':
-                    # average bidir hidden states (concatenation of backward and forward)
-                    encoder_state_ = tf.reduce_mean(encoder_outputs_, axis=1)
-                else:  # use last backward hidden state
-                    encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]  # first backward output
-
-                if encoder.bidir_projection:
-                    encoder_outputs_ = dense(encoder_outputs_, encoder.cell_size, use_bias=False,
-                                             name='bidir_projection')
-
+                        encoder_outputs_, _, encoder_states_ = rnn(reuse=True)
             else:
                 if encoder.time_pooling or encoder.final_state == 'concat_last':
                     raise NotImplementedError
@@ -239,20 +225,30 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     cell = get_cell(input_size)
                     initial_state = get_initial_state()
 
-                encoder_outputs_, _ = auto_reuse(tf.nn.dynamic_rnn)(cell=cell, initial_state=initial_state,
-                                                                    **parameters)
-                if encoder.final_state == 'average':
-                    encoder_state_ = tf.reduce_mean(encoder_outputs_, axis=1)
-                else:
-                    encoder_state_ = encoder_outputs_[:, -1, :]
-
-            encoder_outputs.append(encoder_outputs_)
-            encoder_states.append(encoder_state_)
+                encoder_outputs_, encoder_states_ = auto_reuse(tf.nn.dynamic_rnn)(cell=cell,
+                                                                                  initial_state=initial_state,
+                                                                                  **parameters)
 
             if encoder.time_pooling:
                 for stride in encoder.time_pooling[:encoder.layers - 1]:
                     encoder_input_length_ = (encoder_input_length_ + stride - 1) // stride  # rounding up
 
+            if encoder.final_state == 'concat_last': # concats last states of all backward layers (full LSTM states)
+                encoder_state_ = tf.concat(encoder_states_, axis=1)
+            elif encoder.final_state == 'average':
+                mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_inputs_)[1], dtype=tf.float32)
+                mask = tf.expand_dims(mask, axis=2)
+                encoder_state_ = tf.reduce_sum(mask * encoder_inputs_, axis=1) / tf.reduce_sum(mask, axis=1)
+            elif encoder.bidir:   # last backward hidden state (FIXME apply mask)
+                encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]
+            else:  # use hidden state
+                encoder_state_ = encoder_outputs_[:, -1, :]
+
+            if encoder.bidir and encoder.bidir_projection:
+                encoder_outputs_ = dense(encoder_outputs_, encoder.cell_size, use_bias=False, name='bidir_projection')
+
+            encoder_outputs.append(encoder_outputs_)
+            encoder_states.append(encoder_state_)
             new_encoder_input_length.append(encoder_input_length_)
 
     encoder_state = tf.concat(encoder_states, 1)
@@ -499,8 +495,19 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     with tf.device(device):
         embedding = get_variable('embedding_{}'.format(decoder.name), shape=embedding_shape, initializer=initializer)
 
+    input_shape = tf.shape(decoder_inputs)
+    batch_size = input_shape[0]
+    time_steps = input_shape[1]
+
     def embed(input_):
-        return tf.nn.embedding_lookup(embedding, input_)
+        embedded_input = tf.nn.embedding_lookup(embedding, input_)
+
+        if decoder.use_dropout and decoder.word_keep_prob is not None:
+            # TODO: see if it makes sense to rescale embeddings
+            embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob,
+                                           noise_shape=[batch_size, 1])
+
+        return embedded_input
 
     def get_cell(input_size=None, reuse=False):
         cells = []
@@ -604,10 +611,6 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             output_ = dense(output_, output_size, use_bias=True, name='softmax1')
         return output_
 
-    input_shape = tf.shape(decoder_inputs)
-    batch_size = input_shape[0]
-    time_steps = input_shape[1]
-
     output_size = decoder.vocab_size
 
     state_size = (decoder.cell_size * 2 if decoder.use_lstm else decoder.cell_size) * decoder.layers
@@ -617,8 +620,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
     outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
     samples = tf.TensorArray(dtype=tf.int64, size=time_steps)
-    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps, clear_after_read=False).unstack(
-                            tf.to_int64(tf.transpose(decoder_inputs, perm=(1, 0))))
+    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps).unstack(
+        tf.to_int64(tf.transpose(decoder_inputs, perm=(1, 0))))
+
     states = tf.TensorArray(dtype=tf.float32, size=time_steps)
     weights = tf.TensorArray(dtype=tf.float32, size=time_steps)
     attns = tf.TensorArray(dtype=tf.float32, size=time_steps)
@@ -628,7 +632,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_pos = tf.zeros([batch_size], tf.float32)
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
 
-    if decoder.use_dropout:
+    if decoder.use_dropout:  # dropout_hidden in Nematus
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
@@ -662,10 +666,12 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         softmax = lambda: tf.squeeze(tf.multinomial(tf.log(tf.nn.softmax(output_)), num_samples=1),
                                      axis=1)
 
+        use_target = tf.logical_and(time < time_steps - 1, tf.random_uniform([]) >= feed_previous)
         predicted_symbol = tf.case([
-            (tf.logical_and(time < time_steps - 1, tf.random_uniform([]) >= feed_previous), target),
+            (use_target, target),
             (tf.logical_not(feed_argmax), softmax)],
             default=argmax)   # default case is useful for beam-search
+
         predicted_symbol.set_shape([None])
         predicted_symbol = tf.stop_gradient(predicted_symbol)
         samples = samples.write(time, predicted_symbol)
