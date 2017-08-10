@@ -1,8 +1,8 @@
 import tensorflow as tf
 import math
 from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, RNNCell
-from tensorflow.contrib.rnn import MultiRNNCell, GRUCell
-from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer
+from tensorflow.contrib.rnn import MultiRNNCell
+from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell
 from translate import utils
 
 
@@ -102,7 +102,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 if encoder.use_lstm:
                     cell = CellWrapper(BasicLSTMCell(encoder.cell_size, reuse=reuse))
                 else:
-                    cell = GRUCell(encoder.cell_size, reuse=reuse)
+                    cell = GRUCell(encoder.cell_size, reuse=reuse, layer_norm=encoder.layer_norm)
 
                 if encoder.use_dropout:
                     cell = DropoutWrapper(cell, input_keep_prob=encoder.rnn_input_keep_prob,
@@ -127,8 +127,9 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 encoder_inputs_ = tf.concat([encoder_inputs_, other_inputs], axis=2)
 
             if encoder.use_dropout:
+                noise_shape = [1, time_steps, 1] if encoder.pervasive_dropout else [batch_size, time_steps, 1]
                 encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.word_keep_prob,
-                                                noise_shape=[batch_size, time_steps, 1])
+                                                noise_shape=noise_shape)
 
             if encoder.input_layers:
                 for j, layer_size in enumerate(encoder.input_layers):
@@ -255,9 +256,23 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
     return encoder_outputs, encoder_state, new_encoder_input_length
 
 
-def compute_energy(hidden, state, attn_size, **kwargs):
-    y = dense(state, attn_size, use_bias=True, name='W_a')
+def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_dropout=False, layer_norm=False,
+                   **kwargs):
+    if attn_keep_prob is not None:
+        if pervasive_dropout:
+            state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=[1, tf.shape(state)[1]])
+            hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob, noise_shape=[1, 1, tf.shape(hidden)[2]])
+        else:
+            state = tf.nn.dropout(state, keep_prob=attn_keep_prob)
+            hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob)
+
+    y = dense(state, attn_size, use_bias=not layer_norm, name='W_a')
     y = tf.expand_dims(y, axis=1)
+
+    if layer_norm:
+        y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
+        hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
+
     f = dense(hidden, attn_size, use_bias=False, name='U_a')
 
     v = get_variable('v_a', [attn_size])
@@ -308,7 +323,9 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
                                            attn_filters=encoder.attn_filters,
                                            attn_filter_length=encoder.attn_filter_length, **kwargs)
         else:
-            e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
+            e = compute_energy(hidden_states, state, attn_size=encoder.attn_size,
+                               attn_keep_prob=encoder.attn_keep_prob, pervasive_dropout=encoder.pervasive_dropout,
+                               layer_norm=encoder.layer_norm, **kwargs)
 
         e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
@@ -503,9 +520,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         embedded_input = tf.nn.embedding_lookup(embedding, input_)
 
         if decoder.use_dropout and decoder.word_keep_prob is not None:
-            # TODO: see if it makes sense to rescale embeddings
-            embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob,
-                                           noise_shape=[batch_size, 1])
+            noise_shape = [1, 1] if decoder.pervasive_dropout else [batch_size, 1]
+            embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob, noise_shape=noise_shape)
 
         return embedded_input
 
@@ -516,7 +532,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             if decoder.use_lstm:
                 cell = CellWrapper(BasicLSTMCell(decoder.cell_size, reuse=reuse))
             else:
-                cell = GRUCell(decoder.cell_size, reuse=reuse)
+                cell = GRUCell(decoder.cell_size, reuse=reuse, layer_norm=decoder.layer_norm)
 
             if decoder.use_dropout:
                 input_size_ = input_size if j == 0 else decoder.cell_size
@@ -587,7 +603,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         output_ = tf.concat(projection_input, axis=1)
 
         if decoder.pred_deep_layer:
-            output_ = dense(output_, decoder.embedding_size, activation=tf.tanh, use_bias=True, name='deep_output')
+            if decoder.layer_norm:
+                output_ = dense(output_, decoder.embedding_size, use_bias=False, name='deep_output')
+                output_ = tf.contrib.layers.layer_norm(output_, activation_fn=tf.nn.tanh, scope='output_layer_norm')
+            else:
+                output_ = dense(output_, decoder.embedding_size, activation=tf.tanh, use_bias=True, name='deep_output')
         else:
             if decoder.pred_maxout_layer:
                 output_ = dense(output_, decoder.cell_size, use_bias=True, name='maxout')
@@ -636,8 +656,13 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
-        initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
-                              activation=tf.nn.tanh)
+        if decoder.layer_norm:
+            initial_state = dense(initial_state, state_size, use_bias=False, name='initial_state_projection')
+            initial_state = tf.contrib.layers.layer_norm(initial_state, activation_fn=tf.nn.tanh,
+                                                         scope='initial_state_layer_norm')
+        else:
+            initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
+                                  activation=tf.nn.tanh)
 
     initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
     initial_state, initial_pos, initial_weights = tf.split(initial_data, [state_size, 1, -1], axis=1)

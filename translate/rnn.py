@@ -82,3 +82,82 @@ class CellInitializer(init_ops.Initializer):
             U.append(self.initializer(shape=[self.cell_size, self.cell_size]))
 
         return tf.concat([tf.concat(W, axis=1), tf.concat(U, axis=1)], axis=0)
+
+
+class GRUCell(tf.nn.rnn_cell.RNNCell):
+    def __init__(self, num_units, activation=None, reuse=None, kernel_initializer=None, bias_initializer=None,
+                 layer_norm=False):
+        super(GRUCell, self).__init__(_reuse=reuse)
+        self._num_units = num_units
+        self._activation = activation or tf.nn.tanh
+        self._kernel_initializer = kernel_initializer
+        self._bias_initializer = bias_initializer
+        self._layer_norm = layer_norm
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def call(self, inputs, state, scope=None):
+        inputs = tf.concat(inputs, axis=1)
+
+        with tf.variable_scope("gates"):
+            bias_ones = self._bias_initializer
+            dtype = [a.dtype for a in [inputs, state]][0]
+            if self._bias_initializer is None:
+                bias_ones = init_ops.constant_initializer(1.0, dtype=dtype)
+
+            bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_ones)
+            value = _linear([inputs, state], 2 * self._num_units, bias=False,
+                            kernel_initializer=self._kernel_initializer)
+
+            r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
+
+            if self._layer_norm:
+                r = tf.contrib.layers.layer_norm(r, scope='reset', center=False)
+                u = tf.contrib.layers.layer_norm(u, scope='update', center=False)
+
+            rb, ub = tf.split(bias, num_or_size_splits=2)
+            r = tf.nn.sigmoid(r + rb)
+            u = tf.nn.sigmoid(u + ub)
+
+        with tf.variable_scope("candidate"):
+            bias = tf.get_variable('bias', [self._num_units], dtype=dtype, initializer=self._bias_initializer)
+            c = _linear([inputs, r * state], self._num_units, bias=False, kernel_initializer=self._kernel_initializer)
+
+            if self._layer_norm:
+                c = tf.contrib.layers.layer_norm(c, center=False)
+
+            c = self._activation(c + bias)
+
+        new_h = u * state + (1 - u) * c
+        return new_h, new_h
+
+
+def _linear(args, output_size, bias, bias_initializer=None, kernel_initializer=None):
+    total_arg_size = 0
+    shapes = [a.get_shape() for a in args]
+    for shape in shapes:
+        total_arg_size += shape[1].value
+
+    dtype = [a.dtype for a in args][0]
+
+    scope = tf.get_variable_scope()
+    with tf.variable_scope(scope) as outer_scope:
+        weights = tf.get_variable('kernel', [total_arg_size, output_size], dtype=dtype, initializer=kernel_initializer)
+        if len(args) == 1:
+            res = tf.matmul(args[0], weights)
+        else:
+            res = tf.matmul(tf.concat(args, 1), weights)
+        if not bias:
+            return res
+        with tf.variable_scope(outer_scope) as inner_scope:
+            inner_scope.set_partitioner(None)
+            if bias_initializer is None:
+                bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
+            biases = tf.get_variable('bias', [output_size], dtype=dtype, initializer=bias_initializer)
+        return tf.nn.bias_add(res, biases)

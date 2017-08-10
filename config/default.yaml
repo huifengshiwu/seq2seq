@@ -29,15 +29,16 @@ optimizer: adam          # which training algorithm to use ('sgd', 'adadelta', o
 moving_average: null     # TODO
 
 # dropout
-pervasive_dropout: False
+pervasive_dropout: False  # same dropout mask for all elements in same batch/same sequence (see Gal, 2015)
 rnn_input_dropout: 0.0
 rnn_output_dropout: 0.0
 rnn_state_dropout: 0.0
 initial_state_dropout: 0.0
-word_dropout: 0.0        # TODO: no target word dropout for now
+word_dropout: 0.0
 input_layer_dropout: 0.0
 output_dropout: 0.0      # TODO
 use_dropout: False
+layer_norm: False
 
 # initialization parameters
 weight_scale: null       # if null, initialize weights to TF defaults, otherwise to normal distribution with this stdev
