@@ -73,7 +73,9 @@ class CellInitializer(init_ops.Initializer):
         self.initializer = tf.orthogonal_initializer()
 
     def __call__(self, shape, dtype=None, partition_info=None, verify_shape=None):
-        assert shape[1] % self.cell_size == 0
+        if len(shape) == 1 or shape[1] % self.cell_size != 0:
+            return self.default_initializer(shape, dtype=dtype, partition_info=partition_info)
+
         input_size = shape[0] - self.cell_size
 
         W, U = [], []
@@ -105,34 +107,36 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
     def call(self, inputs, state, scope=None):
         inputs = tf.concat(inputs, axis=1)
 
+        use_bias = not self._layer_norm
+
         with tf.variable_scope("gates"):
             bias_ones = self._bias_initializer
             dtype = [a.dtype for a in [inputs, state]][0]
             if self._bias_initializer is None:
                 bias_ones = init_ops.constant_initializer(1.0, dtype=dtype)
 
-            bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_ones)
-            value = _linear([inputs, state], 2 * self._num_units, bias=False,
-                            kernel_initializer=self._kernel_initializer)
+            value = _linear([inputs, state], 2 * self._num_units, bias=use_bias,
+                            kernel_initializer=self._kernel_initializer, bias_initializer=bias_ones)
 
             r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
 
             if self._layer_norm:
-                r = tf.contrib.layers.layer_norm(r, scope='reset', center=False)
-                u = tf.contrib.layers.layer_norm(u, scope='update', center=False)
+                r = tf.contrib.layers.layer_norm(r, scope='reset')
+                u = tf.contrib.layers.layer_norm(u, scope='update')
 
-            rb, ub = tf.split(bias, num_or_size_splits=2)
-            r = tf.nn.sigmoid(r + rb)
-            u = tf.nn.sigmoid(u + ub)
+            r = tf.nn.sigmoid(r)
+            u = tf.nn.sigmoid(u)
+            # r = 1 - tf.nn.sigmoid(r)  # TODO: test this
+            # u = 1 - tf.nn.sigmoid(u)
 
         with tf.variable_scope("candidate"):
-            bias = tf.get_variable('bias', [self._num_units], dtype=dtype, initializer=self._bias_initializer)
-            c = _linear([inputs, r * state], self._num_units, bias=False, kernel_initializer=self._kernel_initializer)
+            c = _linear([inputs, r * state], self._num_units, bias=use_bias,
+                        kernel_initializer=self._kernel_initializer, bias_initializer=self._bias_initializer)
 
             if self._layer_norm:
-                c = tf.contrib.layers.layer_norm(c, center=False)
+                c = tf.contrib.layers.layer_norm(c)
 
-            c = self._activation(c + bias)
+            c = self._activation(c)
 
         new_h = u * state + (1 - u) * c
         return new_h, new_h
