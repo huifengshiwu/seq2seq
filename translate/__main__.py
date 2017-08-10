@@ -147,7 +147,7 @@ def main(args=None):
                 encoder_or_decoder.setdefault(parameter, value)
 
     device = None
-    if config.no_gpu:
+    if config.no_gpu or config.ensemble:  # ensembles don't work on GPU (because of multiple tf.Session)
         device = '/cpu:0'
     elif config.gpu_id is not None:
         device = '/gpu:{}'.format(config.gpu_id)

@@ -104,64 +104,42 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
     def output_size(self):
         return self._num_units
 
-    def call(self, inputs, state, scope=None):
+    def call(self, inputs, state):
         inputs = tf.concat(inputs, axis=1)
-
-        use_bias = not self._layer_norm
+        input_size = inputs.shape[1]
+        state_size = state.shape[1]
+        dtype = inputs.dtype
 
         with tf.variable_scope("gates"):
-            bias_ones = self._bias_initializer
-            dtype = [a.dtype for a in [inputs, state]][0]
-            if self._bias_initializer is None:
-                bias_ones = init_ops.constant_initializer(1.0, dtype=dtype)
+            bias_initializer = self._bias_initializer
+            if self._bias_initializer is None and not self._layer_norm:
+                bias_initializer = init_ops.constant_initializer(1.0, dtype=dtype)
 
-            value = _linear([inputs, state], 2 * self._num_units, bias=use_bias,
-                            kernel_initializer=self._kernel_initializer, bias_initializer=bias_ones)
+            bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_initializer)
+            weights = tf.get_variable('kernel', [input_size + state_size, 2 * self._num_units], dtype=dtype,
+                                      initializer=self._kernel_initializer)
 
-            r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
+            inputs_ = tf.matmul(inputs, weights[:input_size])
+            state_ = tf.matmul(state, weights[input_size:])
 
             if self._layer_norm:
-                r = tf.contrib.layers.layer_norm(r, scope='reset')
-                u = tf.contrib.layers.layer_norm(u, scope='update')
+                inputs_ = tf.contrib.layers.layer_norm(inputs_, scope='inputs')
+                state_ = tf.contrib.layers.layer_norm(state_, scope='state')
 
-            r = tf.nn.sigmoid(r)
-            u = tf.nn.sigmoid(u)
-            # r = 1 - tf.nn.sigmoid(r)  # TODO: test this
-            # u = 1 - tf.nn.sigmoid(u)
+            value = tf.nn.sigmoid(inputs_ + state_ + bias)
+            r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
 
         with tf.variable_scope("candidate"):
-            c = _linear([inputs, r * state], self._num_units, bias=use_bias,
-                        kernel_initializer=self._kernel_initializer, bias_initializer=self._bias_initializer)
+            bias = tf.get_variable('bias', [self._num_units], dtype=dtype, initializer=self._bias_initializer)
+            weights = tf.get_variable('kernel', [input_size + state_size, self._num_units], dtype=dtype,
+                                      initializer=self._kernel_initializer)
+
+            c = tf.matmul(tf.concat([inputs, r * state], axis=1), weights)
 
             if self._layer_norm:
                 c = tf.contrib.layers.layer_norm(c)
 
-            c = self._activation(c)
+            c = self._activation(c + bias)
 
         new_h = u * state + (1 - u) * c
         return new_h, new_h
-
-
-def _linear(args, output_size, bias, bias_initializer=None, kernel_initializer=None):
-    total_arg_size = 0
-    shapes = [a.get_shape() for a in args]
-    for shape in shapes:
-        total_arg_size += shape[1].value
-
-    dtype = [a.dtype for a in args][0]
-
-    scope = tf.get_variable_scope()
-    with tf.variable_scope(scope) as outer_scope:
-        weights = tf.get_variable('kernel', [total_arg_size, output_size], dtype=dtype, initializer=kernel_initializer)
-        if len(args) == 1:
-            res = tf.matmul(args[0], weights)
-        else:
-            res = tf.matmul(tf.concat(args, 1), weights)
-        if not bias:
-            return res
-        with tf.variable_scope(outer_scope) as inner_scope:
-            inner_scope.set_partitioner(None)
-            if bias_initializer is None:
-                bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
-            biases = tf.get_variable('bias', [output_size], dtype=dtype, initializer=bias_initializer)
-        return tf.nn.bias_add(res, biases)
