@@ -318,6 +318,14 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         if context is not None and encoder.use_context:
             state = tf.concat([state, context], axis=1)
 
+        batch_size = tf.shape(hidden_states)[0]
+        beam_size = tf.shape(state)[0] // batch_size
+
+        hidden_states = tf.expand_dims(hidden_states, axis=1)      # FIXME: ugly
+        hidden_states = tf.tile(hidden_states, [1, beam_size, 1, 1])
+        hidden_states = tf.reshape(hidden_states, [batch_size * beam_size, tf.shape(hidden_states)[2],
+                                   hidden_states.get_shape()[3].value])
+
         if encoder.attn_filters:
             e = compute_energy_with_filter(hidden_states, state, attn_size=encoder.attn_size,
                                            attn_filters=encoder.attn_filters,
@@ -330,6 +338,10 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
 
+        mask = tf.expand_dims(mask, axis=1)
+        mask = tf.tile(mask, [1, beam_size, 1])
+        mask = tf.reshape(mask, [batch_size * beam_size, tf.shape(mask)[2]])
+
         T = encoder.attn_temperature or 1.0
         exp = tf.exp(T * e) * mask
         weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
@@ -338,10 +350,10 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         return weighted_average, weights
 
 
-def no_attention(hidden_states, *args, **kwargs):
-    batch_size = tf.shape(hidden_states)[0]
+def no_attention(state, hidden_states, *args, **kwargs):
+    batch_size = tf.shape(state)[0]
     weighted_average = tf.zeros(shape=tf.stack([batch_size, 0]))
-    weights = tf.zeros(shape=tf.shape(hidden_states)[:2])
+    weights = tf.zeros(shape=[batch_size, tf.shape(hidden_states)[1]])
     return weighted_average, weights
 
 
@@ -665,9 +677,36 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                                   activation=tf.nn.tanh)
 
     initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
-    initial_state, initial_pos, initial_weights = tf.split(initial_data, [state_size, 1, -1], axis=1)
-    initial_state.set_shape([None, state_size])
-    initial_pos = initial_pos[:, 0]
+
+    def get_logits(state, ids):
+        with tf.variable_scope('decoder_{}'.format(decoder.name)):
+            state, pos, prev_weights = tf.split(state, [state_size, 1, -1], axis=1)
+            input_ = embed(ids)
+
+            if decoder.conditional_rnn:
+                with tf.variable_scope('conditional_1'):
+                    state = update(state, input_)
+            elif decoder.update_first:
+                state = update(state, input_, None, ids)
+
+            context, new_weights = look(state, input_, pos=pos, prev_weights=prev_weights)
+
+            if decoder.conditional_rnn:
+                with tf.variable_scope('conditional_2'):
+                    state = update(state, context)
+            elif not decoder.generate_first:
+                state = update(state, input_, context, ids)
+
+            logits = generate(state, input_, context)
+            predicted_symbol = tf.argmax(logits, 1)
+            input_ = embed(predicted_symbol)
+            pos = update_pos(pos, predicted_symbol, encoder_input_length[align_encoder_id])
+
+            if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
+                state = update(state, input_, context, predicted_symbol)
+
+            state = tf.concat([state, pos, new_weights], axis=1)
+            return state, logits
 
     def _time_step(time, input_, input_symbol, pos, state, outputs, states, weights, attns, prev_weights, samples):
         if decoder.conditional_rnn:
@@ -730,9 +769,6 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     attns = attns.stack()
     samples = samples.stack()
 
-    new_data = tf.concat([new_state, tf.expand_dims(new_pos, axis=1), new_weights], axis=1)
-    beam_tensors = utils.AttrDict(data=initial_data, new_data=new_data)
-
     # put batch_size as first dimension
     outputs = tf.transpose(outputs, perm=(1, 0, 2))
     weights = tf.transpose(weights, perm=(1, 0, 2))
@@ -740,7 +776,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     attns = tf.transpose(attns, perm=(1, 0, 2))
     samples = tf.transpose(samples)
 
-    return outputs, weights, states, attns, beam_tensors, samples
+    return outputs, weights, states, attns, samples, get_logits, initial_data
 
 
 def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, align_encoder_id=0,
@@ -762,7 +798,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     attention_states, encoder_state, encoder_input_length = multi_encoder(
         encoder_input_length=encoder_input_length, **parameters)
 
-    outputs, attention_weights, _, _, beam_tensors, samples = attention_decoder(
+    outputs, attention_weights, _, _, samples, beam_fun, initial_data = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state, feed_previous=feed_previous,
         decoder_inputs=targets[:, :-1], align_encoder_id=align_encoder_id, encoder_input_length=encoder_input_length,
         **parameters
@@ -783,7 +819,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     xent_loss = sequence_loss(logits=outputs, targets=targets[:, 1:], weights=target_weights)
     losses = [xent_loss, reinforce_loss, baseline_loss_]
 
-    return losses, [outputs], encoder_state, attention_states, attention_weights, beam_tensors, samples
+    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
 
 
 def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
@@ -814,7 +850,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
     pad = tf.ones(shape=tf.stack([batch_size, 1]), dtype=tf.int32) * utils.BOS_ID
     decoder_inputs = tf.concat([pad, decoder_inputs], axis=1)
 
-    outputs, _, states, attns, _, samples = attention_decoder(
+    outputs, _, states, attns, _, _, _ = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state, decoder_inputs=decoder_inputs,
         encoder_input_length=encoder_input_length[1:], **parameters
     )
@@ -873,7 +909,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
         attention_states[0] += x
 
-    outputs, attention_weights, _, _, beam_tensors, samples = attention_decoder(
+    outputs, attention_weights, _, _, samples, beam_fun, initial_data = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state,
         feed_previous=feed_previous, decoder_inputs=targets[:,:-1],
         align_encoder_id=align_encoder_id, encoder_input_length=encoder_input_length[:1],
@@ -888,7 +924,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
     losses = [xent_loss, None, None]
 
-    return losses, [outputs], encoder_state, attention_states, attention_weights, beam_tensors, samples
+    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
 
 
 def softmax(logits, dim=-1, mask=None):
@@ -928,8 +964,13 @@ def sequence_loss(logits, targets, weights, average_across_timesteps=False, aver
 
 
 def get_weights(sequence, eos_id, include_first_eos=True):
-    weights = (1.0 - tf.minimum(
-        tf.cumsum(tf.to_float(tf.equal(sequence, eos_id)), axis=1), 1.0))
+    cumsum = tf.cumsum(tf.to_float(tf.not_equal(sequence, eos_id)), axis=1)
+    range_ = tf.range(start=1, limit=tf.shape(sequence)[1] + 1)
+    range_ = tf.tile(tf.expand_dims(range_, axis=0), [tf.shape(sequence)[0], 1])
+    weights = tf.to_float(tf.equal(cumsum, tf.to_float(range_)))
+
+    # weights = (1.0 - tf.minimum(
+    #     tf.cumsum(tf.to_float(tf.equal(sequence, eos_id)), axis=1), 1.0))
 
     if include_first_eos:
         weights = weights[:,:-1]

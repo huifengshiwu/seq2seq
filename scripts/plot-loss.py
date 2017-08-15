@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-
+import matplotlib
+matplotlib.use('Agg')
 import argparse
 from matplotlib import pyplot as plt
 import re

@@ -49,10 +49,10 @@ if __name__ == '__main__':
         step, best = max(scores.items(), key=lambda p: key(p[1]))
 
         if 'score' in best:
-            missing_key = next(k for k in ['ter', 'bleu', 'wer'] if k not in best)
+            missing_key = next(k for k in ['bleu', 'ter', 'wer'] if k not in best)
             best[missing_key] = best.pop('score')
 
-        keys = [args.score, 'ter', 'bleu', 'wer', 'penalty', 'ratio']
+        keys = [args.score, 'bleu', 'ter', 'wer', 'penalty', 'ratio']
         best = sorted(best.items(), key=lambda p: keys.index(p[0]))
 
         print(' '.join(itertools.starmap('{}={:.2f}'.format, best)) + ' step={}/{}'.format(step, max_step))

@@ -128,7 +128,7 @@ output: null             # output file for decoding (writes to standard output b
 len_normalization: 1.0   # length normalization coefficient used in beam-search decoder
 early_stopping: True     # reduce beam-size each time a finished hypothesis is encountered (affects decoding speed)
 raw_output: False        # output translation hypotheses without any post-processing
-avg_checkpoints: False   # like ensemble, but instead of averaging the log-probs, average all parameters
+average: False           # like ensemble, but instead of averaging the log-probs, average all parameters
 
 # general
 gpu_id: 0                # index of the GPU to use (starts at zero)

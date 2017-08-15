@@ -17,7 +17,8 @@ from subprocess import Popen, PIPE
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, score_function='corpus_scores', name=None, ref_ext=None,
-                 pred_edits=False, dual_output=False, binary=None, truncate_lines=True, **kwargs):
+                 pred_edits=False, dual_output=False, binary=None, truncate_lines=True, ensemble=False,
+                 checkpoints=None, beam_size=1, len_normalization=1, early_stopping=True, **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
@@ -72,9 +73,23 @@ class TranslationModel:
                 encoder_or_decoder.vocab_size = len(vocab.reverse)
 
         utils.debug('creating model')
-        self.seq2seq_model = Seq2SeqModel(encoders, decoders, self.learning_rate, self.global_step, name=name,
-                                          pred_edits=pred_edits, dual_output=dual_output,
-                                          baseline_step=self.baseline_step, **kwargs)
+
+        self.models = []
+        if ensemble and checkpoints is not None:
+            for i, _ in enumerate(checkpoints, 1):
+                with tf.variable_scope('model_{}'.format(i)):
+                    model = Seq2SeqModel(encoders, decoders, self.learning_rate, self.global_step, name=name,
+                                         pred_edits=pred_edits, dual_output=dual_output,
+                                         baseline_step=self.baseline_step, **kwargs)
+                    self.models.append(model)
+            self.seq2seq_model = self.models[0]
+        else:
+            self.seq2seq_model = Seq2SeqModel(encoders, decoders, self.learning_rate, self.global_step, name=name,
+                                              pred_edits=pred_edits, dual_output=dual_output,
+                                              baseline_step=self.baseline_step, **kwargs)
+            self.models.append(self.seq2seq_model)
+
+        self.seq2seq_model.create_beam_op(self.models, beam_size, len_normalization, early_stopping)
 
         self.batch_iterator = None
         self.dev_batches = None
@@ -128,16 +143,10 @@ class TranslationModel:
 
             utils.log("  {} eval: loss {:.2f}".format(prefix, eval_loss))
 
-    def decode_sentence(self, sess, sentence_tuple, beam_size=1, remove_unk=False, early_stopping=True):
-        return next(self.decode_batch(sess, [sentence_tuple], beam_size, remove_unk, early_stopping))
+    def decode_sentence(self, sess, sentence_tuple, remove_unk=False):
+        return next(self.decode_batch(sess, [sentence_tuple], remove_unk))
 
-    def decode_batch(self, sess, sentence_tuples, batch_size, beam_size=1, remove_unk=False, early_stopping=True,
-                     fix_edits=True):
-        beam_search = beam_size > 1 or isinstance(sess, list)
-
-        if beam_search:
-            batch_size = 1
-
+    def decode_batch(self, sess, sentence_tuples, batch_size, remove_unk=False, fix_edits=True):
         if batch_size == 1:
             batches = ([sentence_tuple] for sentence_tuple in sentence_tuples)   # lazy
         else:
@@ -154,16 +163,8 @@ class TranslationModel:
 
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-
-            if beam_search:
-                hypotheses, _ = self.seq2seq_model.beam_search_decoding(sess, token_ids[0], beam_size,
-                                                                        early_stopping=early_stopping)
-                #hypotheses, _ = self.seq2seq_model.simple_beam_search(sess, token_ids[0], beam_size,
-                #                                                      early_stopping=early_stopping)
-                batch_token_ids = [[hypotheses[0]]]  # first hypothesis is the highest scoring one
-            else:
-                batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids)
-                batch_token_ids = zip(*batch_token_ids)
+            batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids)
+            batch_token_ids = zip(*batch_token_ids)
 
             for src_tokens, trg_token_ids in zip(batch, batch_token_ids):
                 trg_tokens = []
@@ -229,8 +230,7 @@ class TranslationModel:
 
             utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file)
 
-    def decode(self, sess, beam_size, output=None, remove_unk=False, early_stopping=True, raw_output=False,
-               max_test_size=None, **kwargs):
+    def decode(self, sess, output=None, remove_unk=False, raw_output=False, max_test_size=None, **kwargs):
         utils.log('starting decoding')
 
         # empty `test` means that we read from standard input, which is not possible with multiple encoders
@@ -253,8 +253,7 @@ class TranslationModel:
                 batch_size = self.batch_size
                 lines = list(lines)
 
-            hypothesis_iter = self.decode_batch(sess, lines, batch_size, beam_size=beam_size,
-                                                early_stopping=early_stopping, remove_unk=remove_unk)
+            hypothesis_iter = self.decode_batch(sess, lines, batch_size, remove_unk=remove_unk)
 
             for hypothesis, raw in hypothesis_iter:
                 if raw_output:
@@ -266,25 +265,20 @@ class TranslationModel:
             if output_file is not None:
                 output_file.close()
 
-    def evaluate(self, sess, beam_size, score_function, on_dev=True, output=None, remove_unk=False,
-                 max_dev_size=None, early_stopping=True, raw_output=False, fix_edits=True, max_test_size=None,
-                 post_process_script=None, **kwargs):
+    def evaluate(self, sess, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
+                 raw_output=False, fix_edits=True, max_test_size=None, post_process_script=None, **kwargs):
         """
         Decode a dev or test set, and perform evaluation with respect to gold standard, using the provided
         scoring function. If `output` is defined, also save the decoding output to this file.
         When evaluating development data (`on_dev` to True), several dev sets can be specified (`dev_prefix` parameter
         in configuration files), and a score is computed for each of them.
 
-        :param beam_size: if greater than 1, use a beam-search decoder with this beam size (otherwise do greedy
-            decoding)
         :param score_function: name of the scoring function used to score and rank models (typically 'bleu_score')
         :param on_dev: if True, evaluate the dev corpus, otherwise evaluate the test corpus
         :param output: save the hypotheses to this file
         :param remove_unk: remove the UNK symbols from the output
         :param max_dev_size: maximum number of lines to read from dev files
         :param max_test_size: maximum number of lines to read from test files
-        :param early_stopping: parameter of the beam-search decoder: reduce beam-size by one each time a new
-            finished hypothesis (containing EOS symbol) is encountered.
         :param raw_output: save raw decoder output (don't do post-processing like UNK deletion or subword
             concatenation). The evaluation is still done with the post-processed output.
         :param fix_edits: when predicting edit operations, pad shorter hypotheses with KEEP symbols.
@@ -331,8 +325,7 @@ class TranslationModel:
                 src_sentences = list(zip(*lines_[:len(self.src_ext)]))
                 trg_sentences = list(zip(*lines_[len(self.src_ext):]))
 
-                hypothesis_iter = self.decode_batch(sess, lines, self.batch_size, beam_size=beam_size,
-                                                    early_stopping=early_stopping, remove_unk=remove_unk,
+                hypothesis_iter = self.decode_batch(sess, lines, self.batch_size, remove_unk=remove_unk,
                                                     fix_edits=fix_edits)
 
                 for i, (sources, hypothesis, reference) in enumerate(zip(src_sentences, hypothesis_iter,
@@ -425,7 +418,7 @@ class TranslationModel:
         self.training.last_decay = global_step
         self.training.scores = []
 
-    def train_step(self, sess, beam_size, steps_per_checkpoint, model_dir, steps_per_eval=None, max_steps=0,
+    def train_step(self, sess, steps_per_checkpoint, model_dir, steps_per_eval=None, max_steps=0,
                    max_epochs=0, eval_burn_in=0, decay_if_no_progress=None, decay_after_n_epoch=None,
                    decay_every_n_epoch=None, sgd_after_n_epoch=None, sgd_learning_rate=None, min_learning_rate=None,
                    loss_function='xent', use_baseline=True, **kwargs):
@@ -501,7 +494,7 @@ class TranslationModel:
 
             kwargs_ = dict(kwargs)
             kwargs_['output'] = output
-            score, *_ = self.evaluate(sess, beam_size, on_dev=True, **kwargs_)
+            score, *_ = self.evaluate(sess, on_dev=True, **kwargs_)
             self.training.scores.append((global_step, score))
 
         if min_learning_rate is not None and self.learning_rate.eval() < min_learning_rate:
@@ -589,7 +582,11 @@ class TranslationModel:
         if reset:
             blacklist.append('global_step')
 
-        if checkpoints:  # load partial checkpoints
+        if checkpoints and len(self.models) > 1:
+            assert len(self.models) == len(checkpoints)
+            for i, checkpoint in enumerate(checkpoints, 1):
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i))
+        elif checkpoints:  # load partial checkpoints
             for checkpoint in checkpoints:  # checkpoint files to load
                 load_checkpoint(sess, None, checkpoint, blacklist=blacklist)
         elif not reset:
@@ -602,25 +599,25 @@ class TranslationModel:
         save_checkpoint(sess, self.saver, self.checkpoint_dir, self.global_step)
 
 
-variable_mapping = [   # map old names to new names (for backward compatibility with old models)
-    (r'/layer_norm_basic_lstm_cell', r'/basic_lstm_cell'),
-    (r'/forward_1/initial_state', r'/initial_state_fw'),
-    (r'/backward_1/initial_state', r'/initial_state_bw'),
-    (r'map_attns/Matrix', r'map_attns/matrix'),
-    (r'/weights', r'/kernel'),
-    (r'/biases', r'/bias'),
-    (r'/Matrix', r'/kernel'),
-    (r'/Bias', r'/bias'),
-    (r'/softmax/', r'/softmax1/'),
+variable_mapping = [   # map old names to new names
+    # (r'/layer_norm_basic_lstm_cell', r'/basic_lstm_cell'),
+    # (r'/forward_1/initial_state', r'/initial_state_fw'),
+    # (r'/backward_1/initial_state', r'/initial_state_bw'),
+    # (r'map_attns/Matrix', r'map_attns/matrix'),
+    # (r'/weights', r'/kernel'),
+    # (r'/biases', r'/bias'),
+    # (r'/Matrix', r'/kernel'),
+    # (r'/Bias', r'/bias'),
+    # (r'/softmax/', r'/softmax1/'),
 ]
 
 reverse_mapping = [   # map new names to old names
-    (r'/attention_.*?/U_a/kernel', '/attention/U_a'),
-    (r'/attention_.*?/', r'/attention/'),
+    # (r'/attention_.*?/U_a/kernel', '/attention/U_a'),
+    # (r'/attention_.*?/', r'/attention/'),
 ]
 
 
-def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
+def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=None):
     """
     if `filename` is None, we load last checkpoint, otherwise
       we ignore `checkpoint_dir` and load the given checkpoint file.
@@ -633,48 +630,37 @@ def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=()):
     else:
         checkpoint_dir = os.path.dirname(filename)
 
+    vars_ = []
+    var_names = []
+    for var in tf.global_variables():
+        if prefix is None or var.name.startswith(prefix):
+            name = var.name if prefix is None else var.name[len(prefix) + 1:]
+            vars_.append(var)
+            var_names.append(name)
+
     var_file = os.path.join(checkpoint_dir, 'vars.pkl')
-
-    def get_variable_by_name(name):
-        for var in tf.global_variables():
-            if var.name == name:
-                return var
-        return None
-
     if os.path.exists(var_file):
         with open(var_file, 'rb') as f:
-            var_names = pickle.load(f)
-
-        variables = {}
-
-        for var_name in var_names:
-            skip = False
-            for var in tf.global_variables():
-                name = var.name
-                for key, value in reverse_mapping:
-                    name = re.sub(key, value, name)
-                if var_name == name:
-                    variables[var_name] = var
-                    skip = True
-                    break
-
-            if skip:
-                continue
-
-            name = var_name
-            for key, value in variable_mapping:
-                name = re.sub(key, value, name)
-
-            for var in tf.global_variables():
-                if var.name == name:
-                    variables[var_name] = var
-                    break
+            old_names = pickle.load(f)
     else:
-        variables = {var.name: var for var in tf.global_variables()}
+        old_names = list(var_names)
 
-    # remove variables from blacklist
-    # variables = [var for var in variables if not any(prefix in var.name for prefix in blacklist)]
-    variables = {name[:-2]: var for name, var in variables.items() if not any(prefix in name for prefix in blacklist)}
+    name_mapping = {}
+    for name in old_names:
+        name_ = name
+        for key, value in variable_mapping:
+            name_ = re.sub(key, value, name_)
+        name_mapping[name] = name_
+
+    var_names_ = []
+    for name in var_names:
+        for key, value in reverse_mapping:
+            name = re.sub(key, value, name)
+        var_names_.append(name)
+    vars_ = dict(zip(var_names_, vars_))
+
+    variables = {old_name[:-2]: vars_[new_name] for old_name, new_name in name_mapping.items()
+                 if new_name in vars_ and not any(prefix in new_name for prefix in blacklist)}
 
     if filename is not None:
         utils.log('reading model parameters from {}'.format(filename))

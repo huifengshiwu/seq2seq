@@ -112,7 +112,7 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 
         with tf.variable_scope("gates"):
             bias_initializer = self._bias_initializer
-            if self._bias_initializer is None and not self._layer_norm:
+            if self._bias_initializer is None and not self._layer_norm:  # bias of 1 for layer norm?
                 bias_initializer = init_ops.constant_initializer(1.0, dtype=dtype)
 
             bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_initializer)
@@ -134,6 +134,7 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
             weights = tf.get_variable('kernel', [input_size + state_size, self._num_units], dtype=dtype,
                                       initializer=self._kernel_initializer)
 
+            # TODO: multiplication by r after layer_norm
             c = tf.matmul(tf.concat([inputs, r * state], axis=1), weights)
 
             if self._layer_norm:
