@@ -11,7 +11,7 @@ use_lstm: True
 weight_scale: 0.1
 
 data_dir: data/BTEC
-model_dir: models/debug
+model_dir: models/BTEC/debug
 batch_size: 16
 dev_prefix: dev
 

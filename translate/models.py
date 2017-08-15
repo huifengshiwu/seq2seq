@@ -3,7 +3,7 @@ import math
 from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, RNNCell
 from tensorflow.contrib.rnn import MultiRNNCell
 from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell
-from translate import utils
+from translate import utils, beam_search
 
 
 def auto_reuse(fun):
@@ -318,14 +318,6 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         if context is not None and encoder.use_context:
             state = tf.concat([state, context], axis=1)
 
-        batch_size = tf.shape(hidden_states)[0]
-        beam_size = tf.shape(state)[0] // batch_size
-
-        hidden_states = tf.expand_dims(hidden_states, axis=1)      # FIXME: ugly
-        hidden_states = tf.tile(hidden_states, [1, beam_size, 1, 1])
-        hidden_states = tf.reshape(hidden_states, [batch_size * beam_size, tf.shape(hidden_states)[2],
-                                   hidden_states.get_shape()[3].value])
-
         if encoder.attn_filters:
             e = compute_energy_with_filter(hidden_states, state, attn_size=encoder.attn_size,
                                            attn_filters=encoder.attn_filters,
@@ -337,10 +329,6 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
 
         e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
-
-        mask = tf.expand_dims(mask, axis=1)
-        mask = tf.tile(mask, [1, beam_size, 1])
-        mask = tf.reshape(mask, [batch_size * beam_size, tf.shape(mask)[2]])
 
         T = encoder.attn_temperature or 1.0
         exp = tf.exp(T * e) * mask
@@ -473,6 +461,10 @@ def multi_attention(state, hidden_states, encoders, encoder_input_length, pos=No
     for i, (hidden, encoder, input_length) in enumerate(zip(hidden_states, encoders, encoder_input_length)):
         pos_ = pos[i] if pos is not None else None
         prev_weights_ = prev_weights[i] if prev_weights is not None else None
+
+        hidden = beam_search.resize_like(hidden, state)
+        input_length = beam_search.resize_like(input_length, state)
+
         context_vector, weights_ = attention(state=state, hidden_states=hidden, encoder=encoder,
                                              encoder_input_length=input_length, pos=pos_, context=context_vector,
                                              prev_weights=prev_weights_, **kwargs)
@@ -599,6 +591,10 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         is_keep = tf.equal(symbol, utils.KEEP_ID)
         is_del = tf.equal(symbol, utils.DEL_ID)
         is_not_ins = tf.logical_or(is_keep, is_del)
+
+        pos = beam_search.resize_like(pos, symbol)
+        max_pos = beam_search.resize_like(max_pos, symbol)
+
         pos += tf.to_float(is_not_ins)
         if max_pos is not None:
             pos = tf.minimum(pos, tf.to_float(max_pos))
@@ -681,6 +677,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     def get_logits(state, ids):
         with tf.variable_scope('decoder_{}'.format(decoder.name)):
             state, pos, prev_weights = tf.split(state, [state_size, 1, -1], axis=1)
+            pos = tf.squeeze(pos, axis=1)
             input_ = embed(ids)
 
             if decoder.conditional_rnn:
@@ -705,6 +702,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
                 state = update(state, input_, context, predicted_symbol)
 
+            pos = tf.expand_dims(pos, axis=1)
             state = tf.concat([state, pos, new_weights], axis=1)
             return state, logits
 

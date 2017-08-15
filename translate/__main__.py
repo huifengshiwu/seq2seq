@@ -35,7 +35,7 @@ parser.add_argument('--no-gpu', action='store_true', help='run on CPU')
 
 # Decoding options (to avoid having to edit the config file)
 parser.add_argument('--beam-size', type=int)
-parser.add_argument('--len-normalization', type=int)
+parser.add_argument('--len-normalization', type=float)
 parser.add_argument('--no-early-stopping', action='store_const', dest='early_stopping', const=False)
 parser.add_argument('--ensemble', action='store_const', const=True)
 parser.add_argument('--average', action='store_const', const=True)

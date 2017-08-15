@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import matplotlib
-matplotlib.use('Agg')
 import argparse
-from matplotlib import pyplot as plt
 import re
 
 parser = argparse.ArgumentParser()
@@ -14,8 +12,14 @@ parser.add_argument('--labels', nargs='+')
 parser.add_argument('--plot', nargs='+', default=('train', 'dev'))
 parser.add_argument('--average', type=int, nargs='+')
 parser.add_argument('--smooth', type=int)
+parser.add_argument('--no-x', action='store_true', help='Run with no X server')
 
 args = parser.parse_args()
+
+if args.no_x:
+    matplotlib.use('Agg')
+
+from matplotlib import pyplot as plt
 args.plot = [x.lower() for x in args.plot]
 
 if args.average:

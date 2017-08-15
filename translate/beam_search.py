@@ -1,11 +1,19 @@
 import tensorflow as tf
-from translate.models import get_weights
-from translate import utils
+from translate import utils, models
 
 
 """
 Code from: https://github.com/vahidk/EffectiveTensorflow
 """
+
+
+def resize_like(src, dst):
+    batch_size = tf.shape(src)[0]
+    beam_size = tf.shape(dst)[0] // batch_size
+    shape = get_shape(src)[1:]
+    src = tf.tile(tf.expand_dims(src, axis=1), [1, beam_size] + [1] * len(shape))
+    src = tf.reshape(src, tf.stack([batch_size * beam_size] + shape))
+    return src
 
 
 def get_shape(tensor):
@@ -152,7 +160,7 @@ def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, le
     if len_normalization:
         n = tf.shape(sel_ids)[1]
         sel_ids_ = tf.reshape(sel_ids, shape=[batch_size * n, sequence_length])
-        mask = get_weights(sel_ids_, utils.EOS_ID, include_first_eos=True)
+        mask = models.get_weights(sel_ids_, utils.EOS_ID, include_first_eos=True)
         length = tf.reduce_sum(mask, axis=1)
         length = tf.reshape(length, shape=[batch_size, n])
         sel_sum_logprobs /= (length ** len_normalization)
