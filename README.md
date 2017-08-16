@@ -23,7 +23,7 @@ or for interactive decoding:
     ./seq2seq.sh CONFIG --decode
 
 
-Example model:
+Example English&rarr;French model:
 
     config/WMT14/download.sh    # download WMT14 data into raw_data/WMT14
     config/WMT14/prepare.sh     # preprocess the data, and copy the files to data/WMT14
@@ -31,11 +31,21 @@ Example model:
 
 You should get similar results to those (our model was trained on a single Titan X I for about 4 days):
 
-|  BLEU   |         |         |  Loss   |         |  Steps  |  Time  |
-|---------|---------|---------|---------|---------| ------- |--------|
-|  Dev    |  Test   | +beam   |  Dev    |  Train  |         |        |
-|  25.04  |  28.64  |  29.22  |  46.15  |  40.71  |   240k  |   60h  |
-|  25.25  |  28.67  |  29.28  |  45.70  |  39.77  |   330k  |   80h  |
+|  BLEU   |         |         |  Steps  |  Time  |
+|---------|---------|---------|---------|--------|
+|  Dev    |  Test   | +beam   |         |        |
+|  25.04  |  28.64  |  29.22  |   240k  |   60h  |
+|  25.25  |  28.67  |  29.28  |   330k  |   80h  |
+
+Example German&rarr;English model:
+
+    config/IWSLT14/prepare.sh
+    ./seq2seq.sh config/IWSLT14/baseline.yaml --train -v
+
+|  BLEU   |         |         |  Steps  |
+|---------|---------|---------|---------|
+|  Dev    |  Test   |  +beam  |         |
+|  28.32  |  25.33  |  26.74  |   44k   |
 
 ## Features
 * **YAML configuration files**
