@@ -211,7 +211,10 @@ class Seq2SeqModel(object):
                                                                   res.get('baseline_loss'))
 
     def step(self, session, data, update_model=True, align=False, use_sgd=False, **kwargs):
-        session.run(self.dropout_on)
+        if update_model:
+            session.run(self.dropout_on)
+        else:
+            session.run(self.dropout_off)
 
         encoder_inputs, targets, input_length = self.get_batch(data)
         input_feed = {self.targets: targets}
