@@ -22,21 +22,22 @@ or for interactive decoding:
 
     ./seq2seq.sh CONFIG --decode
 
-
-Example English&rarr;French model:
+#### Example English&rarr;French model
+This is the same model and dataset as [Bahdanau et al. 2015](https://arxiv.org/abs/1409.0473).
 
     config/WMT14/download.sh    # download WMT14 data into raw_data/WMT14
     config/WMT14/prepare.sh     # preprocess the data, and copy the files to data/WMT14
     ./seq2seq.sh config/WMT14/baseline.yaml --train -v   # train a baseline model on this data
 
-You should get similar BLEU scores to these (our model was trained on a single Titan X I for about 4 days). This is the same model and dataset as [Bahdanau et al. 2015](https://arxiv.org/abs/1409.0473).
+You should get similar BLEU scores as these (our model was trained on a single Titan X I for about 4 days).
 
 | Dev   | Test  | +beam | Steps | Time |
 |:-----:|:-----:|:-----:|:-----:|:----:|
 | 25.04 | 28.64 | 29.22 | 240k  | 60h  |
 | 25.25 | 28.67 | 29.28 | 330k  | 80h  |
 
-Example German&rarr;English model. This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.06732).
+#### Example German&rarr;English model
+This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.06732).
 
     config/IWSLT14/prepare.sh
     ./seq2seq.sh config/IWSLT14/baseline.yaml --train -v
