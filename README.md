@@ -25,10 +25,17 @@ or for interactive decoding:
 
 Example model:
 
-    experiments/WMT14/download.sh    # download WMT14 data into data/raw
-    experiments/WMT14/prepare.sh     # preprocess the data, and copy the files to experiments/WMT14/data
-    ./seq2seq.sh experiments/WMT14/baseline.yaml --train -v   # train a baseline model on this data
+    config/WMT14/download.sh    # download WMT14 data into raw_data/WMT14
+    config/WMT14/prepare.sh     # preprocess the data, and copy the files to data/WMT14
+    ./seq2seq.sh config/WMT14/baseline.yaml --train -v   # train a baseline model on this data
 
+You should get similar results to those (our model was trained on a single Titan X I for about 4 days):
+
+|  BLEU   |         |         |  Loss   |         |  Steps  |  Time  |
+|---------|---------|---------|---------|---------| ------- |--------|
+|  Dev    |  Test   | +beam   |  Dev    |  Train  |         |        |
+|  25.04  |  28.64  |  29.22  |  46.15  |  40.71  |   240k  |   60h  |
+|  25.25  |  28.67  |  29.28  |  45.70  |  39.77  |   330k  |   80h  |
 
 ## Features
 * **YAML configuration files**
