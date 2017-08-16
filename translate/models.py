@@ -524,7 +524,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         embedded_input = tf.nn.embedding_lookup(embedding, input_)
 
         if decoder.use_dropout and decoder.word_keep_prob is not None:
-            noise_shape = [1, 1] if decoder.pervasive_dropout else [batch_size, 1]
+            noise_shape = [1, 1] if decoder.pervasive_dropout else [tf.shape(input_)[0], 1]
             embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob, noise_shape=noise_shape)
 
         return embedded_input

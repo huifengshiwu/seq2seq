@@ -438,6 +438,7 @@ if __name__ == '__main__':
     args.normalize_punk = extension_arg(args.normalize_punk)
     args.escape_special_chars = extension_arg(args.escape_special_chars)
     args.unescape_special_chars = extension_arg(args.unescape_special_chars)
+    args.deescape_special_chars = extension_arg(args.deescape_special_chars)
 
     if args.lang is None:
         args.lang = args.extensions
