@@ -967,9 +967,6 @@ def get_weights(sequence, eos_id, include_first_eos=True):
     range_ = tf.tile(tf.expand_dims(range_, axis=0), [tf.shape(sequence)[0], 1])
     weights = tf.to_float(tf.equal(cumsum, tf.to_float(range_)))
 
-    # weights = (1.0 - tf.minimum(
-    #     tf.cumsum(tf.to_float(tf.equal(sequence, eos_id)), axis=1), 1.0))
-
     if include_first_eos:
         weights = weights[:,:-1]
         shape = [tf.shape(weights)[0], 1]

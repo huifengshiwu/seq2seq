@@ -1,10 +1,23 @@
 import tensorflow as tf
-from translate import utils, models
+from translate import utils
 
 
 """
 Code from: https://github.com/vahidk/EffectiveTensorflow
 """
+
+def get_weights(sequence, eos_id, include_first_eos=True):
+    cumsum = tf.cumsum(tf.to_float(tf.not_equal(sequence, eos_id)), axis=1)
+    range_ = tf.range(start=1, limit=tf.shape(sequence)[1] + 1)
+    range_ = tf.tile(tf.expand_dims(range_, axis=0), [tf.shape(sequence)[0], 1])
+    weights = tf.to_float(tf.equal(cumsum, tf.to_float(range_)))
+
+    if include_first_eos:
+        weights = weights[:,:-1]
+        shape = [tf.shape(weights)[0], 1]
+        weights = tf.concat([tf.ones(tf.stack(shape)), weights], axis=1)
+
+    return tf.stop_gradient(weights)
 
 
 def resize_like(src, dst):
@@ -160,7 +173,7 @@ def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, le
     if len_normalization:
         n = tf.shape(sel_ids)[1]
         sel_ids_ = tf.reshape(sel_ids, shape=[batch_size * n, sequence_length])
-        mask = models.get_weights(sel_ids_, utils.EOS_ID, include_first_eos=True)
+        mask = get_weights(sel_ids_, utils.EOS_ID, include_first_eos=True)
         length = tf.reduce_sum(mask, axis=1)
         length = tf.reshape(length, shape=[batch_size, n])
         sel_sum_logprobs /= (length ** len_normalization)
