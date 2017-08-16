@@ -97,7 +97,7 @@ def create_vocabulary(filename, output_filename, size, character_level=False, mi
             vocab = {w: c for (w, c) in vocab.items() if c >= min_count}
 
         vocab = {w: c for (w, c) in vocab.items() if w not in _START_VOCAB}
-        vocab_list = _START_VOCAB + sorted(vocab, key=vocab.get, reverse=True)
+        vocab_list = _START_VOCAB + sorted(vocab, key=lambda w: (-vocab[w], w))
         if 0 < size < len(vocab_list):
             vocab_list = vocab_list[:size]
 
@@ -120,22 +120,22 @@ def process_file(filename, lang, ext, args):
 
         processes = [['cat']]   # just copy file if there is no other operation
 
+        if ext in args.deescape_special_chars:
+            processes.append([path_to('deescape-special-chars.perl')])
+        if ext in args.unescape_special_chars:
+            processes.append([path_to('unescape-special-chars.perl')])
         if ext in args.normalize_punk:
-            processes.append([path_to('normalize-punctuation.perl'), '-l',
-                              lang])
+            processes.append([path_to('normalize-punctuation.perl'), '-l', lang])
         if args.normalize_moses:
             processes.append(['sed', 's/|//g'])
         if ext in args.subwords:
             processes.append(['sed', 's/@\\+/@/g'])  # @@ is used as delimiter for subwords
         if ext not in args.no_tokenize:
-            processes.append([path_to('tokenizer.perl'), '-l', lang, '-threads',
-                              str(args.threads)])
+            processes.append([path_to('tokenizer.perl'), '-l', lang, '-threads', str(args.threads)])
         if ext in args.lowercase:
             processes.append([path_to('lowercase.perl')])
         if ext in args.normalize_digits:
             processes.append(['sed', 's/[[:digit:]]/0/g'])
-        if ext in args.unescape_special_chars:
-            processes.append([path_to('unescape-special-chars.perl')])
         if ext in args.escape_special_chars:
             processes.append([path_to('escape-special-chars.perl')])
 
@@ -380,6 +380,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-tokenize', nargs='*', help='no tokenization')
     parser.add_argument('--escape-special-chars', nargs='*', help='escape special characters')
     parser.add_argument('--unescape-special-chars', nargs='*', help='unescape special characters')
+    parser.add_argument('--deescape-special-chars', nargs='*', help='deescape special characters')
     parser.add_argument('--shuffle', help='shuffle the corpus', action='store_true')
     parser.add_argument('--seed', type=int)
 

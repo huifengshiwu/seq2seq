@@ -25,8 +25,8 @@ parser.add_argument('--purge', help='remove previous model files', action='store
 
 # Available actions (exclusive)
 parser.add_argument('--decode', help='translate this corpus (one filename for each encoder)', nargs='*')
-parser.add_argument('--align', help='translate and show alignments by the attention mechanism', nargs='+')
-parser.add_argument('--eval', help='compute BLEU score on this corpus (source files and target file)', nargs='+')
+parser.add_argument('--align', help='translate and show alignments by the attention mechanism', nargs='*')
+parser.add_argument('--eval', help='compute BLEU score on this corpus (source files and target file)', nargs='*')
 parser.add_argument('--train', help='train an NMT model', action='store_true')
 
 # TensorFlow configuration
@@ -74,10 +74,12 @@ def main(args=None):
         for k, v in default_config.items():
             config.setdefault(k, v)
 
+    decoding_mode = any(arg is not None for arg in (args.decode, args.eval, args.align))
+
     # enforce parameter constraints
     assert config.steps_per_eval % config.steps_per_checkpoint == 0, (
         'steps-per-eval should be a multiple of steps-per-checkpoint')
-    assert args.decode is not None or args.eval or args.train or args.align, (
+    assert decoding_mode or args.train, (
         'you need to specify at least one action (decode, eval, align, or train)')
     assert not (args.average and args.ensemble)
 
@@ -170,7 +172,8 @@ def main(args=None):
 
         tf.get_variable_scope().set_initializer(initializer)
 
-        config.decode_only = args.decode is not None or args.eval or args.align  # exempt from creating gradient ops
+        # exempt from creating gradient ops
+        config.decode_only = decoding_mode
 
         if config.tasks is not None:
             model = MultiTaskModel(**config)
@@ -210,7 +213,7 @@ def main(args=None):
                 model.initialize(sess_, [checkpoint])
             sess = sessions[0]
             average_checkpoints(sess, sessions)
-        elif (not config.checkpoints and (args.eval or args.decode is not None or args.align) and
+        elif (not config.checkpoints and decoding_mode and
              (os.path.isfile(best_checkpoint + '.index') or os.path.isfile(best_checkpoint + '.index'))):
             # in decoding and evaluation mode, unless specified otherwise (by `checkpoints`),
             # try to load the best checkpoint
@@ -221,9 +224,9 @@ def main(args=None):
 
         if args.decode is not None:
             model.decode(sess, **config)
-        elif args.eval:
+        elif args.eval is not None:
             model.evaluate(sess, on_dev=False, **config)
-        elif args.align:
+        elif args.align is not None:
             model.align(sess, **config)
         elif args.train:
             try:

@@ -177,7 +177,7 @@ def sentence_to_token_ids(sentence, vocabulary, character_level=False):
 
 
 def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, vocab_prefix, name=None,
-                  ref_ext=None, binary=None, **kwargs):
+                  ref_ext=None, binary=None, decode=None, eval=None, align=None, **kwargs):
     """
     Get a bunch of file prefixes and extensions, and output the list of filenames to be used
     by the model.
@@ -215,10 +215,20 @@ def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, voc
             debug('copying vocab to {}'.format(dest))
             shutil.copy(src, dest)
 
-    test = kwargs.get('decode')  # empty list means we decode from standard input
-    if test is None:
-        test = test or kwargs.get('eval')
-        test = test or kwargs.get('align')
+    exts = list(extensions)
+    if decode is not None:  # empty list means we decode from standard input
+        test = decode
+        exts.pop(-1)
+    elif eval is not None:
+        if ref_ext is not None:
+            exts[-1] = ref_ext
+        test = eval or dev_prefix[:1]
+    else:
+        test = align or dev_prefix[:1]
+
+    if len(test) == 1 and not (decode and os.path.exists(test[0])):
+        corpus_path = os.path.join(data_dir, test[0])
+        test = ['{}.{}'.format(corpus_path, ext) for ext in exts]
 
     filenames = namedtuple('filenames', ['train', 'dev', 'test', 'vocab'])
     return filenames(train, dev, test, vocab)

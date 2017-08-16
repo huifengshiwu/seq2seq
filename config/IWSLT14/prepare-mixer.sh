@@ -3,6 +3,7 @@
 # Script downloaded from: https://github.com/facebookresearch/MIXER
 
 TOKENIZER=scripts/tokenizer.perl
+UNESCAPE=scripts/unescape-special-chars.perl
 LC=scripts/lowercase.perl
 CLEAN=scripts/clean-corpus-n.perl
 
@@ -46,6 +47,7 @@ for l in $src $tgt; do
     sed -e 's/<\/title>//g' | \
     sed -e 's/<description>//g' | \
     sed -e 's/<\/description>//g' | \
+    # perl $UNESCAPE | \
     perl $TOKENIZER -threads 8 -l $l > $tmp/$tok
     echo ""
 done
@@ -64,6 +66,7 @@ for l in $src $tgt; do
         sed -e 's/<seg id="[0-9]*">\s*//g' | \
         sed -e 's/\s*<\/seg>\s*//g' | \
         sed -e "s/\’/\'/g" | \
+    # perl $UNESCAPE | \
     perl $TOKENIZER -threads 8 -l $l | \
     perl $LC > $f
     echo ""
