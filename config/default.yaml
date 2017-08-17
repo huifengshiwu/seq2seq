@@ -99,8 +99,7 @@ conditional_rnn: False    # two-layer decoder, where the 1st layer is used for a
 generate_first: True      # generate next word before updating state (look->generate->update)
 update_first: False       # update state before looking and generating next word
 rnn_feed_attn: True       # feed attention context to the RNN's transition fonction
-attn_use_lstm_state: True # use LSTM's full state for attention
-pred_use_lstm_state: True # use LSTM's full state for next word prediction
+use_lstm_full_state: True # use LSTM's full state for attention and next word prediction
 pred_embed_proj: True     # project decoder output to embedding size before projecting to vocab size
 pred_deep_layer: False    # add a non-linear transformation just before softmax
 pred_maxout_layer: True   # use a maxout layer just before the vocabulary projection and softmax

@@ -553,8 +553,6 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             return CellWrapper(MultiRNNCell(cells))
 
     def look(state, input_, prev_weights=None, pos=None):
-        if not decoder.attn_use_lstm_state:
-            state = state[:, -cell_output_size:]
         prev_weights_ = [prev_weights if i == align_encoder_id else None for i in range(len(encoders))]
         pos_ = None
         if decoder.pred_edits:
@@ -575,14 +573,18 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         initializer = CellInitializer(decoder.cell_size) if decoder.orthogonal_init else None
         with tf.variable_scope(tf.get_variable_scope(), initializer=initializer):
             try:
-                _, new_state = get_cell(input_size)(input_, state)
+                output, new_state = get_cell(input_size)(input_, state)
             except ValueError:  # auto_reuse doesn't work with LSTM cells
-                _, new_state = get_cell(input_size, reuse=True)(input_, state)
+                output, new_state = get_cell(input_size, reuse=True)(input_, state)
 
         if decoder.skip_update and decoder.pred_edits and symbol is not None:
             is_del = tf.equal(symbol, utils.DEL_ID)
             new_state = tf.where(is_del, state, new_state)
-        return new_state
+
+        if decoder.use_lstm and decoder.use_lstm_full_state:
+            output = new_state
+
+        return output, new_state
 
     def update_pos(pos, symbol, max_pos=None):
         if not decoder.pred_edits:
@@ -601,8 +603,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         return pos
 
     def generate(state, input_, context):
-        if not decoder.pred_use_lstm_state:
-            state = state[:, -cell_output_size:]
+        if decoder.pred_use_lstm_state is False:  # for back-compatibility
+            state = state[:,-decoder.cell_size:]
 
         projection_input = [state, context]
         if decoder.use_previous_word:
@@ -636,20 +638,15 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             bias = get_variable('softmax1/bias', shape=[decoder.vocab_size])
             output_ = tf.matmul(output_, tf.transpose(embedding)) + bias
         else:
-            output_ = dense(output_, output_size, use_bias=True, name='softmax1')
+            output_ = dense(output_, decoder.vocab_size, use_bias=True, name='softmax1')
         return output_
 
-    output_size = decoder.vocab_size
-
     state_size = (decoder.cell_size * 2 if decoder.use_lstm else decoder.cell_size) * decoder.layers
-    cell_output_size = decoder.cell_size
-
     time = tf.constant(0, dtype=tf.int32, name='time')
 
     outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
     samples = tf.TensorArray(dtype=tf.int64, size=time_steps)
-    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps).unstack(
-        tf.to_int64(tf.transpose(decoder_inputs, perm=(1, 0))))
+    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps).unstack(tf.to_int64(tf.transpose(decoder_inputs)))
 
     states = tf.TensorArray(dtype=tf.float32, size=time_steps)
     weights = tf.TensorArray(dtype=tf.float32, size=time_steps)
@@ -660,7 +657,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_pos = tf.zeros([batch_size], tf.float32)
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
 
-    if decoder.use_dropout:  # dropout_hidden in Nematus
+    if decoder.use_dropout:
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
@@ -672,56 +669,69 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
                                   activation=tf.nn.tanh)
 
+    if decoder.use_lstm and decoder.use_lstm_full_state:
+        initial_output = initial_state
+    else:
+        initial_output = initial_state[:, -decoder.cell_size:]
+
     initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
 
-    def get_logits(state, ids):
+    def get_logits(state, ids):  # for beam-search decoding
         with tf.variable_scope('decoder_{}'.format(decoder.name)):
             state, pos, prev_weights = tf.split(state, [state_size, 1, -1], axis=1)
             pos = tf.squeeze(pos, axis=1)
             input_ = embed(ids)
 
+            if decoder.use_lstm and decoder.use_lstm_full_state:
+                output = state
+            else:
+                # output is always the right-most part of state. However, this only works at test time,
+                # because different dropout operations can be used on state and output.
+                output = state[:, -decoder.cell_size:]
+
             if decoder.conditional_rnn:
                 with tf.variable_scope('conditional_1'):
-                    state = update(state, input_)
+                    output, state = update(state, input_)
             elif decoder.update_first:
-                state = update(state, input_, None, ids)
+                output, state = update(state, input_, None, ids)
 
-            context, new_weights = look(state, input_, pos=pos, prev_weights=prev_weights)
+            context, new_weights = look(output, input_, pos=pos, prev_weights=prev_weights)
 
             if decoder.conditional_rnn:
                 with tf.variable_scope('conditional_2'):
-                    state = update(state, context)
+                    output, state = update(state, context)
             elif not decoder.generate_first:
-                state = update(state, input_, context, ids)
+                output, state = update(state, input_, context, ids)
 
-            logits = generate(state, input_, context)
+            logits = generate(output, input_, context)
             predicted_symbol = tf.argmax(logits, 1)
             input_ = embed(predicted_symbol)
             pos = update_pos(pos, predicted_symbol, encoder_input_length[align_encoder_id])
 
             if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
-                state = update(state, input_, context, predicted_symbol)
+                _, state = update(state, input_, context, predicted_symbol)
 
             pos = tf.expand_dims(pos, axis=1)
             state = tf.concat([state, pos, new_weights], axis=1)
             return state, logits
 
-    def _time_step(time, input_, input_symbol, pos, state, outputs, states, weights, attns, prev_weights, samples):
+    def _time_step(time, input_, input_symbol, pos, state, output, outputs, states, weights, attns, prev_weights,
+                   samples):
         if decoder.conditional_rnn:
             with tf.variable_scope('conditional_1'):
-                state = update(state, input_)
+                output, state = update(state, input_)
         elif decoder.update_first:
-            state = update(state, input_, None, input_symbol)
+            output, state = update(state, input_, None, input_symbol)
 
-        context, new_weights = look(state, input_, pos=pos, prev_weights=prev_weights)
+        context, new_weights = look(output, input_, pos=pos, prev_weights=prev_weights)
 
         if decoder.conditional_rnn:
             with tf.variable_scope('conditional_2'):
-                state = update(state, context)
+                output, state = update(state, context)
         elif not decoder.generate_first:
-            state = update(state, input_, context, input_symbol)
+            output, state = update(state, input_, context, input_symbol)
 
-        output_ = generate(state, input_, context)
+        output_ = generate(output, input_, context)
 
         argmax = lambda: tf.argmax(output_, 1)
         target = lambda: inputs.read(time + 1)
@@ -747,17 +757,17 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         outputs = outputs.write(time, output_)
 
         if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
-            state = update(state, input_, context, predicted_symbol)
+            output, state = update(state, input_, context, predicted_symbol)
 
-        return (time + 1, input_, predicted_symbol, pos, state, outputs, states, weights, attns, new_weights,
+        return (time + 1, input_, predicted_symbol, pos, state, output, outputs, states, weights, attns, new_weights,
                 samples)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
-        _, _, _, new_pos, new_state, outputs, states, weights, attns, new_weights, samples = tf.while_loop(
+        _, _, _, new_pos, new_state, _, outputs, states, weights, attns, new_weights, samples = tf.while_loop(
             cond=lambda time, *_: time < time_steps,
             body=_time_step,
-            loop_vars=(time, initial_input, initial_symbol, initial_pos, initial_state, outputs, weights, states,
-                       attns, initial_weights, samples),
+            loop_vars=(time, initial_input, initial_symbol, initial_pos, initial_state, initial_output, outputs,
+                       weights, states, attns, initial_weights, samples),
             parallel_iterations=decoder.parallel_iterations,
             swap_memory=decoder.swap_memory)
 
@@ -803,7 +813,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     )
 
     if use_baseline:
-        baseline_rewards = reinforce_baseline(outputs, rewards)   # FIXME: use outputs or decoder states/outputs?
+        baseline_rewards = reinforce_baseline(outputs, rewards)   # FIXME: use logits or decoder outputs?
         baseline_weights = get_weights(samples, utils.EOS_ID, include_first_eos=False)
         baseline_loss_ = baseline_loss(rewards=baseline_rewards, weights=baseline_weights)
     else:
