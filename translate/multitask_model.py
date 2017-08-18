@@ -23,19 +23,19 @@ class MultiTaskModel:
         self.main_model = self.models[0]
         self.ratios = [ratio / sum(self.ratios) for ratio in self.ratios]  # unit normalization
 
-    def train(self, sess, **kwargs):
+    def train(self, **kwargs):
         for model in self.models:
             utils.log('initializing {}'.format(model.name))
-            model.init_training(sess=sess, **kwargs)
+            model.init_training(**kwargs)
 
         while True:
             i = np.random.choice(len(self.models), 1, p=self.ratios)[0]
             model = self.models[i]
             try:
-                model.train_step(sess=sess, **kwargs)
+                model.train_step(**kwargs)
             except utils.CheckpointException:
                 if i == 0:   # only save main model (includes all variables)
-                    model.save(sess)
+                    model.save()
                     step, score = model.training.scores[-1]
                     model.manage_best_checkpoints(step, score)
 

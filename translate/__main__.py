@@ -53,6 +53,8 @@ parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=Fa
 parser.add_argument('--align-encoder-id', type=int, default=0)
 
 def main(args=None):
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'   # disable TensorFlow's debugging logs
+
     args = parser.parse_args(args)
 
     # read config file and default config
@@ -206,34 +208,32 @@ def main(args=None):
         best_checkpoint = os.path.join(config.checkpoint_dir, 'best')
 
         if config.ensemble and len(config.checkpoints) > 1:
-            model.initialize(sess, config.checkpoints)
+            model.initialize(config.checkpoints)
         elif config.average and len(config.checkpoints) > 1:
-            sessions = [tf.Session() for _ in config.checkpoints]
+            model.initialize(reset=True)
+            sessions = [tf.Session(config=tf_config) for _ in config.checkpoints]
             for sess_, checkpoint in zip(sessions, config.checkpoints):
-                model.initialize(sess_, [checkpoint])
-            sess = sessions[0]
+                model.initialize(sess=sess_, checkpoints=[checkpoint])
             average_checkpoints(sess, sessions)
         elif (not config.checkpoints and decoding_mode and
              (os.path.isfile(best_checkpoint + '.index') or os.path.isfile(best_checkpoint + '.index'))):
             # in decoding and evaluation mode, unless specified otherwise (by `checkpoints`),
             # try to load the best checkpoint
-            model.initialize(sess, [best_checkpoint])
+            model.initialize([best_checkpoint])
         else:
             # loads last checkpoint, unless `reset` is true
-            model.initialize(sess, **config)
+            model.initialize(**config)
 
         if args.decode is not None:
-            model.decode(sess, **config)
+            model.decode(**config)
         elif args.eval is not None:
-            model.evaluate(sess, on_dev=False, **config)
+            model.evaluate(on_dev=False, **config)
         elif args.align is not None:
-            model.align(sess, **config)
+            model.align(**config)
         elif args.train:
             try:
-                model.train(sess=sess, **config)
-            except (KeyboardInterrupt, utils.FinishedTrainingException):
-                utils.log('exiting...')
-                model.save(sess)
+                model.train(**config)
+            except KeyboardInterrupt:
                 sys.exit()
 
 

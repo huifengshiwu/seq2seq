@@ -159,9 +159,9 @@ class Seq2SeqModel(object):
 
         return update_ops
 
-    def reinforce_step(self, session, data, update_model=True, align=False, use_sgd=False, update_baseline=True,
+    def reinforce_step(self, data, update_model=True, align=False, use_sgd=False, update_baseline=True,
                        reward_function=None, **kwargs):
-        session.run(self.dropout_on)   # FIXME
+        # self.dropout_on.run()
 
         encoder_inputs, targets, input_length = self.get_batch(data)
         input_feed = {self.targets: targets, self.feed_argmax: False, self.feed_previous: 1.0}
@@ -170,7 +170,7 @@ class Seq2SeqModel(object):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
             input_feed[self.encoder_input_length[i]] = input_length[i]
 
-        samples, outputs = session.run([self.samples, self.outputs], input_feed)
+        samples, outputs = tf.get_default_session().run([self.samples, self.outputs], input_feed)
 
         if reward_function is None:
             reward_function = 'sentence_bleu'
@@ -206,15 +206,15 @@ class Seq2SeqModel(object):
         if align:
             output_feed['weights'] = self.attention_weights
 
-        res = session.run(output_feed, input_feed)
+        res = tf.get_default_session().run(output_feed, input_feed)
         return namedtuple('output', 'loss weights baseline_loss')(res['loss'], res.get('weights'),
                                                                   res.get('baseline_loss'))
 
-    def step(self, session, data, update_model=True, align=False, use_sgd=False, **kwargs):
+    def step(self, data, update_model=True, align=False, use_sgd=False, **kwargs):
         if update_model:
-            session.run(self.dropout_on)
+            self.dropout_on.run()
         else:
-            session.run(self.dropout_off)
+            self.dropout_off.run()
 
         encoder_inputs, targets, input_length = self.get_batch(data)
         input_feed = {self.targets: targets}
@@ -229,12 +229,12 @@ class Seq2SeqModel(object):
         if align:
             output_feed['weights'] = self.attention_weights
 
-        res = session.run(output_feed, input_feed)
+        res = tf.get_default_session().run(output_feed, input_feed)
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
-    def greedy_decoding(self, session, token_ids):
+    def greedy_decoding(self, token_ids):
         for model in self.models:
-            session.run(model.dropout_off)
+            model.dropout_off.run()
 
         data = [
             ids + [[] for _ in self.decoders] if len(ids) == len(self.encoders) else ids
@@ -252,7 +252,7 @@ class Seq2SeqModel(object):
                 input_feed[model.encoder_inputs[i]] = encoder_inputs[i]
                 input_feed[model.encoder_input_length[i]] = input_length[i]
 
-        outputs = session.run(self.beam_outputs, input_feed)
+        outputs = tf.get_default_session().run(self.beam_outputs, input_feed)
         return [outputs[:,0,:]]
 
     def get_batch(self, data, decoding=False):

@@ -6,7 +6,7 @@ attn_size: 256
 embedding_size: 128
 
 bidir: True
-use_lstm: True
+use_lstm: False
 weight_scale: 0.1
 
 data_dir: data/BTEC
@@ -22,8 +22,8 @@ learning_rate_decay_factor: 0.9
 decay_every_n_epoch: 1
 decay_after_n_epoch: 21
 
-steps_per_checkpoint: 1000
-steps_per_eval: 1000
+steps_per_checkpoint: 2000
+steps_per_eval: 2000
 score_function: corpus_scores
 
 max_gradient_norm: 1.0

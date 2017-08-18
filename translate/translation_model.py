@@ -97,6 +97,7 @@ class TranslationModel:
         self.saver = None
         self.keep_best = keep_best
         self.checkpoint_dir = checkpoint_dir
+        self.epoch = None
 
         self.training = utils.AttrDict()  # used to keep track of training
 
@@ -132,21 +133,21 @@ class TranslationModel:
         ]
         self.src_vocab, self.trg_vocab = self.vocabs[:len(self.src_ext)], self.vocabs[len(self.src_ext):]
 
-    def eval_step(self, sess):
+    def eval_step(self):
         # compute loss on dev set
         for prefix, dev_batches in zip(self.dev_prefix, self.dev_batches):
             eval_loss = sum(
-                self.seq2seq_model.step(sess, batch, update_model=False).loss * len(batch)
+                self.seq2seq_model.step(batch, update_model=False).loss * len(batch)
                 for batch in dev_batches
             )
             eval_loss /= sum(map(len, dev_batches))
 
             utils.log("  {} eval: loss {:.2f}".format(prefix, eval_loss))
 
-    def decode_sentence(self, sess, sentence_tuple, remove_unk=False):
-        return next(self.decode_batch(sess, [sentence_tuple], remove_unk))
+    def decode_sentence(self, sentence_tuple, remove_unk=False):
+        return next(self.decode_batch([sentence_tuple], remove_unk))
 
-    def decode_batch(self, sess, sentence_tuples, batch_size, remove_unk=False, fix_edits=True):
+    def decode_batch(self, sentence_tuples, batch_size, remove_unk=False, fix_edits=True):
         if batch_size == 1:
             batches = ([sentence_tuple] for sentence_tuple in sentence_tuples)   # lazy
         else:
@@ -163,7 +164,7 @@ class TranslationModel:
 
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-            batch_token_ids = self.seq2seq_model.greedy_decoding(sess, token_ids)
+            batch_token_ids = self.seq2seq_model.greedy_decoding(token_ids)
             batch_token_ids = zip(*batch_token_ids)
 
             for src_tokens, trg_token_ids in zip(batch, batch_token_ids):
@@ -199,7 +200,7 @@ class TranslationModel:
                 yield hypothesis, raw_hypothesis
 
 
-    def align(self, sess, output=None, align_encoder_id=0, **kwargs):
+    def align(self, output=None, align_encoder_id=0, **kwargs):
         if self.binary and any(self.binary):
             raise NotImplementedError
 
@@ -213,7 +214,7 @@ class TranslationModel:
                 for ext, vocab, sentence in zip(self.extensions, self.vocabs, lines)
             ]
 
-            _, weights = self.seq2seq_model.step(sess, data=[token_ids], forward_only=True, align=True,
+            _, weights = self.seq2seq_model.step(data=[token_ids], forward_only=True, align=True,
                                                  update_model=False)
 
             trg_vocab = self.trg_vocab[0]
@@ -230,7 +231,7 @@ class TranslationModel:
 
             utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file)
 
-    def decode(self, sess, output=None, remove_unk=False, raw_output=False, max_test_size=None, **kwargs):
+    def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, **kwargs):
         utils.log('starting decoding')
 
         # empty `test` means that we read from standard input, which is not possible with multiple encoders
@@ -253,7 +254,7 @@ class TranslationModel:
                 batch_size = self.batch_size
                 lines = list(lines)
 
-            hypothesis_iter = self.decode_batch(sess, lines, batch_size, remove_unk=remove_unk)
+            hypothesis_iter = self.decode_batch(lines, batch_size, remove_unk=remove_unk)
 
             for hypothesis, raw in hypothesis_iter:
                 if raw_output:
@@ -265,7 +266,7 @@ class TranslationModel:
             if output_file is not None:
                 output_file.close()
 
-    def evaluate(self, sess, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
+    def evaluate(self, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
                  raw_output=False, fix_edits=True, max_test_size=None, post_process_script=None, **kwargs):
         """
         Decode a dev or test set, and perform evaluation with respect to gold standard, using the provided
@@ -325,7 +326,7 @@ class TranslationModel:
                 src_sentences = list(zip(*lines_[:len(self.src_ext)]))
                 trg_sentences = list(zip(*lines_[len(self.src_ext):]))
 
-                hypothesis_iter = self.decode_batch(sess, lines, self.batch_size, remove_unk=remove_unk,
+                hypothesis_iter = self.decode_batch(lines, self.batch_size, remove_unk=remove_unk,
                                                     fix_edits=fix_edits)
 
                 for i, (sources, hypothesis, reference) in enumerate(zip(src_sentences, hypothesis_iter,
@@ -373,32 +374,37 @@ class TranslationModel:
 
         return scores
 
-    def train(self, sess, baseline_steps=0, loss_function='xent', use_baseline=True, **kwargs):
-        self.init_training(sess=sess, **kwargs)
+    def train(self, baseline_steps=0, loss_function='xent', use_baseline=True, **kwargs):
+        self.init_training(**kwargs)
 
         if (loss_function == 'reinforce' and use_baseline and baseline_steps > 0 and
-                    self.baseline_step.eval(sess) < baseline_steps):
+                    self.baseline_step.eval() < baseline_steps):
             utils.log('pre-training reinforce baseline')
-            for i in range(baseline_steps - self.baseline_step.eval(sess)):
-                self.seq2seq_model.reinforce_step(sess, next(self.batch_iterator), update_model=False,
+            for i in range(baseline_steps - self.baseline_step.eval()):
+                self.seq2seq_model.reinforce_step(next(self.batch_iterator), update_model=False,
                                                   use_sgd=False, update_baseline=True)
 
         utils.log('starting training')
         while True:
             try:
-                self.train_step(sess=sess, loss_function=loss_function, use_baseline=use_baseline, **kwargs)
+                self.train_step(loss_function=loss_function, use_baseline=use_baseline, **kwargs)
+            except (utils.FinishedTrainingException, KeyboardInterrupt):
+                utils.log('exiting...')
+                self.save()
+                return
             except utils.EvalException:
-                self.save(sess)
+                self.save()
                 step, score = self.training.scores[-1]
                 self.manage_best_checkpoints(step, score)
             except utils.CheckpointException:
-                self.save(sess)
+                self.save()
 
-    def init_training(self, sess, sgd_after_n_epoch=None, **kwargs):
+    def init_training(self, sgd_after_n_epoch=None, **kwargs):
         self.read_data(**kwargs)
+        self.epoch = self.batch_size * self.global_step // self.train_size
 
-        global_step = self.global_step.eval(sess)
-        epoch = self.batch_size * global_step // self.train_size
+        global_step = self.global_step.eval()
+        epoch = self.epoch.eval()
         if sgd_after_n_epoch is not None and epoch >= sgd_after_n_epoch:  # already switched to SGD
             self.training.use_sgd = True
         else:
@@ -418,10 +424,16 @@ class TranslationModel:
         self.training.last_decay = global_step
         self.training.scores = []
 
-    def train_step(self, sess, steps_per_checkpoint, model_dir, steps_per_eval=None, max_steps=0,
+    def train_step(self, steps_per_checkpoint, model_dir, steps_per_eval=None, max_steps=0,
                    max_epochs=0, eval_burn_in=0, decay_if_no_progress=None, decay_after_n_epoch=None,
                    decay_every_n_epoch=None, sgd_after_n_epoch=None, sgd_learning_rate=None, min_learning_rate=None,
                    loss_function='xent', use_baseline=True, **kwargs):
+        if min_learning_rate is not None and self.learning_rate.eval() < min_learning_rate:
+            utils.debug('learning rate is too small: stopping')
+            raise utils.FinishedTrainingException
+        if 0 < max_steps <= self.global_step.eval() or 0 < max_epochs <= self.epoch.eval():
+            raise utils.FinishedTrainingException
+
         start_time = time.time()
 
         if loss_function == 'reinforce':
@@ -429,7 +441,7 @@ class TranslationModel:
         else:
             step_function = self.seq2seq_model.step
 
-        res = step_function(sess, next(self.batch_iterator), update_model=True, use_sgd=self.training.use_sgd,
+        res = step_function(next(self.batch_iterator), update_model=True, use_sgd=self.training.use_sgd,
                             update_baseline=True)
 
         self.training.loss += res.loss
@@ -437,14 +449,14 @@ class TranslationModel:
 
         self.training.time += time.time() - start_time
         self.training.steps += 1
-        global_step = self.global_step.eval(sess)
 
-        epoch = self.batch_size * global_step // self.train_size
+        global_step = self.global_step.eval()
+        epoch = self.epoch.eval()
 
         if decay_after_n_epoch is not None and self.batch_size * global_step >= decay_after_n_epoch * self.train_size:
             if decay_every_n_epoch is not None and (self.batch_size * (global_step - self.training.last_decay)
                                                     >= decay_every_n_epoch * self.train_size):
-                sess.run(self.learning_rate_decay_op)
+                self.learning_rate_decay_op.eval()
                 utils.debug('  decaying learning rate to: {:.3g}'.format(self.learning_rate.eval()))
                 self.training.last_decay = global_step
 
@@ -453,7 +465,7 @@ class TranslationModel:
                 utils.debug('epoch {}, starting to use SGD'.format(epoch + 1))
                 self.training.use_sgd = True
                 if sgd_learning_rate is not None:
-                    sess.run(self.learning_rate.assign(sgd_learning_rate))
+                    self.learning_rate.assign(sgd_learning_rate).eval()
                 self.training.last_decay = global_step  # reset learning rate decay
 
         if steps_per_checkpoint and global_step % steps_per_checkpoint == 0:
@@ -473,11 +485,11 @@ class TranslationModel:
 
             if decay_if_no_progress and len(self.training.losses) >= decay_if_no_progress:
                 if loss >= max(self.training.losses[:decay_if_no_progress]):
-                    sess.run(self.learning_rate_decay_op)
+                    self.learning_rate_decay_op.eval()
 
             self.training.losses.append(loss)
             self.training.loss, self.training.time, self.training.steps, self.training.baseline_loss = 0, 0, 0, 0
-            self.eval_step(sess)
+            self.eval_step()
 
         if steps_per_eval and global_step % steps_per_eval == 0 and 0 <= eval_burn_in <= global_step:
 
@@ -494,15 +506,10 @@ class TranslationModel:
 
             kwargs_ = dict(kwargs)
             kwargs_['output'] = output
-            score, *_ = self.evaluate(sess, on_dev=True, **kwargs_)
+            score, *_ = self.evaluate(on_dev=True, **kwargs_)
             self.training.scores.append((global_step, score))
 
-        if min_learning_rate is not None and self.learning_rate.eval() < min_learning_rate:
-            utils.debug('learning rate is too small: stopping')
-            raise utils.FinishedTrainingException
-        if 0 < max_steps <= global_step or 0 < max_epochs <= epoch:
-            raise utils.FinishedTrainingException
-        elif steps_per_eval and global_step % steps_per_eval == 0:
+        if steps_per_eval and global_step % steps_per_eval == 0:
             raise utils.EvalException
         elif steps_per_checkpoint and global_step % steps_per_checkpoint == 0:
             raise utils.CheckpointException
@@ -559,8 +566,8 @@ class TranslationModel:
             for score_, step_ in scores:
                 f.write('{:.2f} {}\n'.format(score_, step_))
 
-    def initialize(self, sess, checkpoints=None, reset=False, reset_learning_rate=False, max_to_keep=1,
-                   keep_every_n_hours=0, **kwargs):
+    def initialize(self, checkpoints=None, reset=False, reset_learning_rate=False, max_to_keep=1,
+                   keep_every_n_hours=0, sess=None, **kwargs):
         """
         :param checkpoints: list of checkpoints to load (instead of latest checkpoint)
         :param reset: don't load latest checkpoint, reset learning rate and global step
@@ -568,6 +575,8 @@ class TranslationModel:
         :param max_to_keep: keep this many latest checkpoints at all times
         :param keep_every_n_hours: and keep checkpoints every n hours
         """
+        sess = sess or tf.get_default_session()
+
         if keep_every_n_hours <= 0 or keep_every_n_hours is None:
             keep_every_n_hours = float('inf')
 
@@ -592,11 +601,11 @@ class TranslationModel:
         elif not reset:
             load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist)
 
-        utils.debug('global step: {}'.format(self.global_step.eval(sess)))
-        utils.debug('baseline step: {}'.format(self.baseline_step.eval(sess)))
+        utils.debug('global step: {}'.format(self.global_step.eval()))
+        utils.debug('baseline step: {}'.format(self.baseline_step.eval()))
 
-    def save(self, sess):
-        save_checkpoint(sess, self.saver, self.checkpoint_dir, self.global_step)
+    def save(self):
+        save_checkpoint(tf.get_default_session(), self.saver, self.checkpoint_dir, self.global_step)
 
 
 variable_mapping = [   # map old names to new names
