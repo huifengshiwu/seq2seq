@@ -53,8 +53,6 @@ parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=Fa
 parser.add_argument('--align-encoder-id', type=int, default=0)
 
 def main(args=None):
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'   # disable TensorFlow's debugging logs
-
     args = parser.parse_args(args)
 
     # read config file and default config
@@ -76,6 +74,7 @@ def main(args=None):
         for k, v in default_config.items():
             config.setdefault(k, v)
 
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # disable TensorFlow's debugging logs
     decoding_mode = any(arg is not None for arg in (args.decode, args.eval, args.align))
 
     # enforce parameter constraints
@@ -155,8 +154,15 @@ def main(args=None):
     device = None
     if config.no_gpu:
         device = '/cpu:0'
+        device_id = None
     elif config.gpu_id is not None:
         device = '/gpu:{}'.format(config.gpu_id)
+        device_id = config.gpu_id
+    else:
+        device_id = 0
+
+    # hide other GPUs so that TensorFlow won't use memory on them
+    os.environ['CUDA_VISIBLE_DEVICES'] = '' if device_id is None else str(device_id)
 
     utils.log('creating model')
     utils.log('using device: {}'.format(device))
