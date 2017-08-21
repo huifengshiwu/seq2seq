@@ -19,7 +19,7 @@ max_steps: 30000
 
 cell_size: 256
 attn_size: 256
-use_lstm: True
+cell_type: LSTM
 
 encoders:
   - name: feats41

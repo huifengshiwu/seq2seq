@@ -9,7 +9,7 @@ attn_size: 256
 embedding_size: 128
 
 bidir: True
-use_lstm: True
+cell_type: LSTM
 weight_scale: 0.1
 
 data_dir: data/IWSLT14

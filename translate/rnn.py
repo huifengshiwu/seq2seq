@@ -1,4 +1,5 @@
 from tensorflow.python.ops import init_ops
+from tensorflow.python.util import nest
 import tensorflow as tf
 
 
@@ -86,6 +87,114 @@ class CellInitializer(init_ops.Initializer):
         return tf.concat([tf.concat(W, axis=1), tf.concat(U, axis=1)], axis=0)
 
 
+class DropoutGRUCell(tf.nn.rnn_cell.RNNCell):
+    def __init__(self, num_units, activation=None, reuse=None, kernel_initializer=None, bias_initializer=None,
+                 layer_norm=False, state_keep_prob=None, input_keep_prob=None, input_size=None, final=False):
+        super(DropoutGRUCell, self).__init__(_reuse=reuse)
+        self._num_units = num_units
+        self._activation = activation or tf.nn.tanh
+        self._kernel_initializer = kernel_initializer
+        self._bias_initializer = bias_initializer
+        self._layer_norm = layer_norm
+        self._state_keep_prob = state_keep_prob
+        self._input_keep_prob = input_keep_prob
+        self._final = final
+
+        def batch_noise(s):
+            s = tf.concat(([1], tf.TensorShape(s).as_list()), 0)
+            return tf.random_uniform(s)
+
+        if input_keep_prob is not None:
+            self._input_noise = DropoutGRUCell._enumerated_map_structure(lambda i, s: batch_noise(s), input_size)
+        if state_keep_prob is not None:
+            self._state_noise = DropoutGRUCell._enumerated_map_structure(lambda i, s: batch_noise(s), num_units)
+
+    @property
+    def state_size(self):
+        return self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    @staticmethod
+    def _enumerated_map_structure(map_fn, *args, **kwargs):
+        ix = [0]
+
+        def enumerated_fn(*inner_args, **inner_kwargs):
+            r = map_fn(ix[0], *inner_args, **inner_kwargs)
+            ix[0] += 1
+            return r
+
+        return nest.map_structure(enumerated_fn, *args, **kwargs)
+
+    @staticmethod
+    def _dropout(values, recurrent_noise, keep_prob):
+        def dropout(index, value, noise):
+            random_tensor = keep_prob + noise
+            binary_tensor = tf.floor(random_tensor)
+            ret = tf.div(value, keep_prob) * binary_tensor
+            ret.set_shape(value.get_shape())
+            return ret
+
+        return DropoutGRUCell._enumerated_map_structure(dropout, values, recurrent_noise)
+
+    def call(self, inputs, state):
+        inputs = tf.concat(inputs, axis=1)
+        input_size = inputs.shape[1]
+        state_size = state.shape[1]
+        dtype = inputs.dtype
+
+        if self._state_keep_prob:
+            dropped_state = DropoutGRUCell._dropout(state, self._state_noise, self._state_keep_prob)
+        else:
+            dropped_state = state
+
+        if self._input_keep_prob:
+            dropped_inputs = DropoutGRUCell._dropout(inputs, self._input_noise, self._input_keep_prob)
+        else:
+            dropped_inputs = inputs
+
+        with tf.variable_scope('gates'):
+            bias_initializer = self._bias_initializer
+            if self._bias_initializer is None and not self._layer_norm:
+                bias_initializer = init_ops.constant_initializer(1.0, dtype=dtype)
+
+            gate_bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_initializer)
+            gate_weights = tf.get_variable('kernel', [input_size + state_size, 2 * self._num_units], dtype=dtype,
+                                           initializer=self._kernel_initializer)
+
+        with tf.variable_scope('candidate'):
+            candidate_bias = tf.get_variable('bias', [self._num_units], dtype=dtype,
+                                             initializer=self._bias_initializer)
+            candidate_weights = tf.get_variable('kernel', [input_size + state_size, self._num_units], dtype=dtype,
+                                                initializer=self._kernel_initializer)
+
+
+        weights = tf.concat([gate_weights, candidate_weights], axis=1)
+        bias = tf.concat([gate_bias, candidate_bias], axis=0)
+
+        inputs_ = tf.matmul(dropped_inputs, weights[:input_size])
+        state_ = tf.matmul(dropped_state, weights[input_size:])
+
+        if self._layer_norm:
+            state_ = tf.contrib.layers.layer_norm(state_)
+            inputs_ = tf.contrib.layers.layer_norm(inputs_)
+
+        rs, us, cs = tf.split(value=state_, num_or_size_splits=3, axis=1)
+        ri, ui, ci = tf.split(value=inputs_, num_or_size_splits=3, axis=1)
+        br, bu, bc = tf.split(value=bias, num_or_size_splits=3, axis=0)
+
+        size = 2 * self._num_units
+        value = tf.nn.sigmoid(state_[:,:size] + inputs_[:,:size] + bias[:size])
+        r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
+
+        c = self._activation(ci + cs * r + bc)
+
+        new_h = u * state + (1 - u) * c
+        return new_h, new_h
+
+
 class GRUCell(tf.nn.rnn_cell.RNNCell):
     def __init__(self, num_units, activation=None, reuse=None, kernel_initializer=None, bias_initializer=None,
                  layer_norm=False):
@@ -134,7 +243,6 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
             weights = tf.get_variable('kernel', [input_size + state_size, self._num_units], dtype=dtype,
                                       initializer=self._kernel_initializer)
 
-            # TODO: multiplication by r after layer_norm
             c = tf.matmul(tf.concat([inputs, r * state], axis=1), weights)
 
             if self._layer_norm:

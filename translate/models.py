@@ -1,8 +1,7 @@
 import tensorflow as tf
 import math
-from tensorflow.contrib.rnn import BasicLSTMCell, DropoutWrapper, RNNCell
-from tensorflow.contrib.rnn import MultiRNNCell
-from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell
+from tensorflow.contrib.rnn import BasicLSTMCell, RNNCell, DropoutWrapper, MultiRNNCell
+from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell, DropoutGRUCell
 from translate import utils, beam_search
 
 
@@ -94,17 +93,24 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
     new_encoder_input_length = []
 
     for i, encoder in enumerate(encoders):
+        if encoder.use_lstm is False:
+            encoder.cell_type = 'GRU'
+
         with tf.variable_scope('encoder_{}'.format(encoder.name)):
             encoder_inputs_ = encoder_inputs[i]
             encoder_input_length_ = encoder_input_length[i]
 
             def get_cell(input_size=None, reuse=False):
-                if encoder.use_lstm:
+                if encoder.cell_type.lower() == 'lstm':
                     cell = CellWrapper(BasicLSTMCell(encoder.cell_size, reuse=reuse))
+                elif encoder.cell_type.lower() == 'dropoutgru':
+                    cell = DropoutGRUCell(encoder.cell_size, reuse=reuse, layer_norm=encoder.layer_norm,
+                                          input_size=input_size, input_keep_prob=encoder.rnn_input_keep_prob,
+                                          state_keep_prob=encoder.rnn_state_keep_prob)
                 else:
                     cell = GRUCell(encoder.cell_size, reuse=reuse, layer_norm=encoder.layer_norm)
 
-                if encoder.use_dropout:
+                if encoder.use_dropout and encoder.cell_type.lower() != 'dropoutgru':
                     cell = DropoutWrapper(cell, input_keep_prob=encoder.rnn_input_keep_prob,
                                           output_keep_prob=encoder.rnn_output_keep_prob,
                                           state_keep_prob=encoder.rnn_state_keep_prob,
@@ -188,7 +194,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             )
 
             input_size = encoder_inputs_.get_shape()[2].value
-            state_size = (encoder.cell_size * 2 if encoder.use_lstm else encoder.cell_size)
+            state_size = (encoder.cell_size * 2 if encoder.cell_type.lower() == 'lstm' else encoder.cell_size)
 
             def get_initial_state(name='initial_state'):
                 if encoder.train_initial_states:
@@ -506,6 +512,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     """
     assert not decoder.pred_maxout_layer or decoder.cell_size % 2 == 0, 'cell size must be a multiple of 2'
 
+    if decoder.use_lstm is False:
+        decoder.cell_type = 'GRU'
+
     embedding_shape = [decoder.vocab_size, decoder.embedding_size]
     if decoder.embedding_initializer == 'sqrt3':
         initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
@@ -533,13 +542,18 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         cells = []
 
         for j in range(decoder.layers):
-            if decoder.use_lstm:
+            input_size_ = input_size if j == 0 else decoder.cell_size
+
+            if decoder.cell_type.lower() == 'lstm':
                 cell = CellWrapper(BasicLSTMCell(decoder.cell_size, reuse=reuse))
+            elif decoder.cell_type.lower() == 'dropoutgru':
+                cell = DropoutGRUCell(decoder.cell_size, reuse=reuse, layer_norm=decoder.layer_norm,
+                                      input_size=input_size_, input_keep_prob=decoder.rnn_input_keep_prob,
+                                      state_keep_prob=decoder.rnn_state_keep_prob)
             else:
                 cell = GRUCell(decoder.cell_size, reuse=reuse, layer_norm=decoder.layer_norm)
 
-            if decoder.use_dropout:
-                input_size_ = input_size if j == 0 else decoder.cell_size
+            if decoder.use_dropout and decoder.cell_type.lower() != 'dropoutgru':
                 cell = DropoutWrapper(cell, input_keep_prob=decoder.rnn_input_keep_prob,
                                       output_keep_prob=decoder.rnn_output_keep_prob,
                                       state_keep_prob=decoder.rnn_state_keep_prob,
@@ -581,7 +595,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             is_del = tf.equal(symbol, utils.DEL_ID)
             new_state = tf.where(is_del, state, new_state)
 
-        if decoder.use_lstm and decoder.use_lstm_full_state:
+        if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
             output = new_state
 
         return output, new_state
@@ -641,7 +655,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             output_ = dense(output_, decoder.vocab_size, use_bias=True, name='softmax1')
         return output_
 
-    state_size = (decoder.cell_size * 2 if decoder.use_lstm else decoder.cell_size) * decoder.layers
+    state_size = (decoder.cell_size * 2 if decoder.cell_type.lower() == 'lstm' else decoder.cell_size) * decoder.layers
     time = tf.constant(0, dtype=tf.int32, name='time')
 
     outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
@@ -669,7 +683,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
                                   activation=tf.nn.tanh)
 
-    if decoder.use_lstm and decoder.use_lstm_full_state:
+    if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
         initial_output = initial_state
     else:
         initial_output = initial_state[:, -decoder.cell_size:]
@@ -682,7 +696,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             pos = tf.squeeze(pos, axis=1)
             input_ = embed(ids)
 
-            if decoder.use_lstm and decoder.use_lstm_full_state:
+            if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
                 output = state
             else:
                 # output is always the right-most part of state. However, this only works at test time,
@@ -865,7 +879,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
     chaining_loss = sequence_loss(logits=outputs, targets=encoder_inputs[0], weights=input_weights[0])
 
-    if decoder.use_lstm:
+    if decoder.cell_type.lower() == 'lstm':
         size = states.get_shape()[2].value
         decoder_outputs = states[:, :, size // 2:]
     else:

@@ -621,6 +621,7 @@ variable_mapping = [   # map old names to new names
 ]
 
 reverse_mapping = [   # map new names to old names
+    # (r'/dropout_gru_cell', r'/gru_cell')
     # (r'/attention_.*?/U_a/kernel', '/attention/U_a'),
     # (r'/attention_.*?/', r'/attention/'),
 ]

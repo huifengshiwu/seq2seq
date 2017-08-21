@@ -67,7 +67,7 @@ cell_size: 1000          # size of the RNN cells
 embedding_size: 620      # size of the embeddings
 attn_size: 1000          # size of the attention layer
 layers: 1                # number of RNN layers per encoder and decoder
-use_lstm: False          # use LSTM units instead of GRU units
+cell_type: LSTM          # LSTM, GRU, DropoutGRU
 character_level: False   # character-level sequences
 max_len: 50              # max length of the input and output sequences (strongly affects speed and memory usage)
 truncate_lines: True     # if True truncate lines which are too long, otherwise just drop them

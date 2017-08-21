@@ -3,7 +3,7 @@ description: "multi-speaker baseline on BTEC, new configuration"
 
 cell_size: 256
 attn_size: 256
-use_lstm: True
+cell_type: LSTM
 
 data_dir: data/BTEC_speech
 model_dir: models/BTEC_speech/baseline_new
