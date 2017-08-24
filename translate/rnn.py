@@ -155,41 +155,25 @@ class DropoutGRUCell(tf.nn.rnn_cell.RNNCell):
         else:
             dropped_inputs = inputs
 
-        with tf.variable_scope('gates'):
-            bias_initializer = self._bias_initializer
-            if self._bias_initializer is None and not self._layer_norm:
-                bias_initializer = init_ops.constant_initializer(1.0, dtype=dtype)
+        with tf.variable_scope('state'):
+            state_weights = tf.get_variable('kernel', [state_size, 3 * self._num_units], dtype=dtype, initializer=self._kernel_initializer)
 
-            gate_bias = tf.get_variable('bias', [2 * self._num_units], dtype=dtype, initializer=bias_initializer)
-            gate_weights = tf.get_variable('kernel', [input_size + state_size, 2 * self._num_units], dtype=dtype,
-                                           initializer=self._kernel_initializer)
+        with tf.variable_scope('input'):
+            input_weights = tf.get_variable('kernel', [input_size, 3 * self._num_units], dtype=dtype, initializer=self._kernel_initializer)
 
-        with tf.variable_scope('candidate'):
-            candidate_bias = tf.get_variable('bias', [self._num_units], dtype=dtype,
-                                             initializer=self._bias_initializer)
-            candidate_weights = tf.get_variable('kernel', [input_size + state_size, self._num_units], dtype=dtype,
-                                                initializer=self._kernel_initializer)
+        bias = tf.get_variable('bias', [3 * self._num_units], dtype=dtype, initializer=self._bias_initializer)
 
-
-        weights = tf.concat([gate_weights, candidate_weights], axis=1)
-        bias = tf.concat([gate_bias, candidate_bias], axis=0)
-
-        inputs_ = tf.matmul(dropped_inputs, weights[:input_size])
-        state_ = tf.matmul(dropped_state, weights[input_size:])
+        inputs_ = tf.matmul(dropped_inputs, input_weights)
+        state_ = tf.matmul(dropped_state, state_weights)
 
         if self._layer_norm:
             state_ = tf.contrib.layers.layer_norm(state_)
             inputs_ = tf.contrib.layers.layer_norm(inputs_)
 
-        rs, us, cs = tf.split(value=state_, num_or_size_splits=3, axis=1)
-        ri, ui, ci = tf.split(value=inputs_, num_or_size_splits=3, axis=1)
-        br, bu, bc = tf.split(value=bias, num_or_size_splits=3, axis=0)
-
         size = 2 * self._num_units
         value = tf.nn.sigmoid(state_[:,:size] + inputs_[:,:size] + bias[:size])
         r, u = tf.split(value=value, num_or_size_splits=2, axis=1)
-
-        c = self._activation(ci + cs * r + bc)
+        c = self._activation(inputs_[:,size:] + state_[:,size:] * r + bias[size:])
 
         new_h = u * state + (1 - u) * c
         return new_h, new_h

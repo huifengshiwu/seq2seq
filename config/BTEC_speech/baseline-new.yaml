@@ -1,12 +1,8 @@
 label: 'BTEC baseline'
-description: "multi-speaker baseline on BTEC, new configuration"
-
-cell_size: 256
-attn_size: 256
-cell_type: LSTM
+description: "multi-speaker baseline on BTEC, same configuration as Berard et al. 2016"
 
 data_dir: data/BTEC_speech
-model_dir: models/BTEC_speech/baseline_new
+model_dir: models/BTEC_speech/baseline
 train_prefix: train.concat.shuf  # Michel, Philippe, Loic, Marion, Helene, Fabienne
 max_train_size: 20000
 
@@ -16,37 +12,36 @@ batch_size: 64
 batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 1.0
-
-sgd_after_n_epoch: 20
-sgd_learning_rate: 0.2
-learning_rate_decay_factor: 0.9
-decay_every_n_epoch: 1
-decay_after_n_epoch: 21
+weight_scale: 0.1
 
 steps_per_checkpoint: 1000
 steps_per_eval: 1000
-score_function: corpus_scores
 max_steps: 30000
+
+cell_size: 256
+attn_size: 256
+cell_type: DropoutGRU
 
 encoders:
   - name: feats41
-    max_len: 600
-    binary: True
     embedding_size: 41
-    input_layers: [256, 256]
-    bidir: True
     layers: 3
     time_pooling: [2, 2]
     pooling_avg: True
-    final_state: average
-    attn_filters: 1
+    binary: True
+    attn_filters: 4
     attn_filter_length: 25
+    max_len: 600
+    input_layers: [256, 256]
+    final_state: average
+    train_initial_states: True
+    bidir: True
 
 decoders:
   - name: en
-    max_len: 25
-    embedding_size: 256
     layers: 2
+    embedding_size: 256
+    max_len: 25
     conditional_rnn: True
     pred_deep_layer: True
 
@@ -54,6 +49,7 @@ use_dropout: True
 pervasive_dropout: True
 rnn_input_dropout: 0.2
 rnn_output_dropout: 0.2
-rnn_state_dropout: 0.2
-initial_state_dropout: 0.2
+attn_dropout: 0.2
 word_dropout: 0.2
+initial_state_dropout: 0.2
+use_lstm_full_state: False
