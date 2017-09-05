@@ -70,3 +70,7 @@ cp ${data_dir}/test1.Agnes.feats41 ${data_dir}/test1.feats41
 cp ${data_dir}/test2.Agnes.feats41 ${data_dir}/test2.feats41
 
 scripts/speech/audio-features-shuf.py ${data_dir}/train.{concat,concat.shuf}.feats41 --input-txt ${data_dir}/train.concat.{fr,en} --output-txt ${data_dir}/train.concat.shuf.{fr,en}
+
+scripts/prepare-data.py ${data_dir}/train.concat.shuf fr en ${data_dir} --mode vocab --character-level --no-tokenize --vocab-prefix vocab.char
+cp ${data_dir}/vocab.fr ${data_dir}/vocab.w2c.fr
+cp ${data_dir}/vocab.char.en ${data_dir}/vocab.w2c.en
