@@ -144,6 +144,31 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     if encoder.use_dropout:
                         encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)
 
+            if encoder.conv_filters:
+                encoder_inputs_ = tf.expand_dims(encoder_inputs_, axis=3)
+
+                for k, out_channels in enumerate(encoder.conv_filters, 1):
+                    in_channels = encoder_inputs_.get_shape()[-1].value
+                    filter_height, filter_width = encoder.conv_size
+
+                    strides = encoder.conv_strides or [1, 1]
+                    strides = [1] + strides + [1]
+
+                    filter_ = get_variable('filter_{}'.format(k),
+                                           [filter_height, filter_width, in_channels, out_channels])
+                    encoder_inputs_ = tf.nn.conv2d(encoder_inputs_, filter_, strides, padding='SAME')
+
+                    if encoder.conv_activation.lower == 'relu':
+                        encoder_inputs_ = tf.nn.relu(encoder_inputs_)
+
+                    encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / strides[1]))
+
+                feature_size = encoder_inputs_.shape[2].value
+                channels = encoder_inputs_.shape[3].value
+                time_steps = tf.shape(encoder_inputs_)[1]
+
+                encoder_inputs_ = tf.reshape(encoder_inputs_, [batch_size, time_steps, feature_size * channels])
+
             if encoder.convolutions:
                 if encoder.binary:
                     raise NotImplementedError
@@ -188,9 +213,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             # Contrary to Theano's RNN implementation, states after the sequence length are zero
             # (while Theano repeats last state)
+
             parameters = dict(
                 inputs=encoder_inputs_, sequence_length=encoder_input_length_,
                 dtype=tf.float32, parallel_iterations=encoder.parallel_iterations,
+                inter_layers=encoder.inter_layers, inter_layer_activation=encoder.inter_layer_activation,
             )
 
             input_size = encoder_inputs_.get_shape()[2].value

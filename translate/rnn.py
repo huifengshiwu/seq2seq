@@ -5,7 +5,8 @@ import tensorflow as tf
 
 def stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, inputs, initial_states_fw=None, initial_states_bw=None,
                                     dtype=None, sequence_length=None, parallel_iterations=None, scope=None,
-                                    time_pooling=None, pooling_avg=None, initializer=None):
+                                    time_pooling=None, pooling_avg=None, initializer=None, inter_layers=None,
+                                    inter_layer_activation=None):
     states_fw = []
     states_bw = []
     prev_layer = inputs
@@ -35,6 +36,11 @@ def stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, inputs, initial_states_f
                 if time_pooling and i < len(cells_fw) - 1:
                     prev_layer, sequence_length = apply_time_pooling(prev_layer, sequence_length, time_pooling[i],
                                                                      pooling_avg)
+
+                if inter_layers and len(inter_layers) > i and inter_layers[i]:
+                    layer_size = inter_layers[i]
+                    activation = tf.nn.relu if inter_layer_activation.lower() == 'relu' else None
+                    prev_layer = tf.layers.dense(prev_layer, layer_size, activation=activation, use_bias=True)
 
             states_fw.append(state_fw)
             states_bw.append(state_bw)
