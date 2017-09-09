@@ -3,6 +3,7 @@
 import itertools
 import argparse
 import re
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('log_file')
@@ -12,6 +13,9 @@ parser.add_argument('--task-name')
 
 if __name__ == '__main__':
     args = parser.parse_args()
+
+    if os.path.isdir(args.log_file):
+        args.log_file = os.path.join(args.log_file, 'log.txt')
 
     with open(args.log_file) as log_file:
         scores = {}

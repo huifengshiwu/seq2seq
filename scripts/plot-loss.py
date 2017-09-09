@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-import matplotlib
 import argparse
 import re
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('log_files', nargs='+')
@@ -13,13 +13,22 @@ parser.add_argument('--plot', nargs='+', default=('train', 'dev'))
 parser.add_argument('--average', type=int, nargs='+')
 parser.add_argument('--smooth', type=int)
 parser.add_argument('--no-x', action='store_true', help='Run with no X server')
+parser.add_argument('--text', action='store_true')
+parser.add_argument('--stride', type=int)
+parser.add_argument('-n', '--max-values', type=int, default=15)
 
 args = parser.parse_args()
 
-if args.no_x:
-    matplotlib.use('Agg')
 
-from matplotlib import pyplot as plt
+args.log_files = [os.path.join(log_file, 'config.yaml') if os.path.isdir(log_file) else log_file
+                  for log_file in args.log_files]
+
+if not args.text:
+    import matplotlib
+    if args.no_x:
+        matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+
 args.plot = [x.lower() for x in args.plot]
 
 if args.average:
@@ -32,7 +41,11 @@ if args.labels:
         raise Exception('error: wrong number of labels')
     labels = args.labels
 else:
-    labels = ['model {}'.format(i) for i in range(1, n + 1)]
+    dirnames = [os.path.basename(os.path.dirname(log_file)) for log_file in args.log_files]
+    if len(set(dirnames)) == len(dirnames):
+        labels = dirnames
+    else:
+        labels = ['model {}'.format(i) for i in range(1, n + 1)]
 
 data = []
 
@@ -78,7 +91,7 @@ for log_file in args.log_files:
                 ter_score = float(m.group(1))
                 ter_scores.append((current_step, ter_score))
 
-    data.append((dev_perplexities, train_perplexities, bleu_scores, ter_scores))
+    data.append((bleu_scores, ter_scores, dev_perplexities, train_perplexities))
 
 
 if args.average:
@@ -105,21 +118,61 @@ if args.average:
     data = new_data
 
 
-for label, data_ in zip(labels, data):
-    dev_perplexities, train_perplexities, bleu_scores, ter_scores = data_
+def plot(data, label, linestyle=None):
+    if not args.text:
+        plt.plot(*data, linestyle=linestyle, label=label)
+    else:
+        steps, values = list(data)
+        if args.stride:
+            steps = steps[::args.stride]
+            values = values[::args.stride]
+        if args.max_values:
+            steps = steps[:args.max_values]
+            values = values[:args.max_values]
 
-    if 'bleu' in args.plot and bleu_scores:
-        plt.plot(*zip(*bleu_scores), ':', label=' '.join([label, 'BLEU']))
-    if 'ter' in args.plot and ter_scores:
-        plt.plot(*zip(*ter_scores), ':', label=' '.join([label, 'TER']))
-    if 'dev' in args.plot and dev_perplexities:
-        plt.plot(*zip(*dev_perplexities), '--', label=' '.join([label, 'dev loss']))
-    if 'train' in args.plot and train_perplexities:
-        plt.plot(*zip(*train_perplexities), label=' '.join([label, 'train loss']))
+        s = ''.join('{:>7.2f}'.format(x) for x in values) 
+        print('{:>10}'.format(label), s)
 
-legend = plt.legend(loc='best', shadow=True)
+score_names = ['bleu', 'ter', 'dev', 'train']
+score_labels = ['BLEU', 'TER', 'dev loss', 'train loss']
+linestyles = [':', ':', '--', None]
 
-if args.output is not None:
-    plt.savefig(args.output)
+def boldify(text):
+    return '\033[1m' + text + '\033[0m'
+
+if args.text:
+    data = list(zip(*data))
+    for score_name, score_label, values in zip(score_names, score_labels, data):
+        if score_name not in args.plot or not values or not any(values):
+            continue
+
+        steps = [set([step for step, value in values_]) for values_ in values]
+        steps = sorted(list(set.intersection(*steps)))
+
+        if args.stride:
+            steps = steps[args.stride - 1::args.stride]
+        if args.max_values:
+            steps = steps[:args.max_values]
+
+        steps_ = set(steps)
+
+        print('{:<10}'.format(score_label), ''.join('{:>7}'.format(step) for step in steps))
+        for model_label, values_ in zip(labels, values):
+            values_ = [value for step, value in values_ if step in steps_]
+            best_value = max(values_) if score_name == 'bleu' else min(values_)
+            s = ['{:>7.2f}'.format(x) for x in values_]
+            s = [boldify(y) if x == best_value else y for x, y in zip(values_, s)]
+            print('{:<10}'.format(model_label), ''.join(s))
+        print()
 else:
-    plt.show()
+    for label, data_ in zip(labels, data):
+        for score_name, score_label, linestyle, values in zip(score_names, score_labels, linestyles, data_):
+            if score_name in args.plot and values:
+                plt.plot(*zip(*values), label=' '.join([label, score_label]), linestyle=linestyle)
+
+    legend = plt.legend(loc='best', shadow=True)
+
+    if args.output is not None:
+        plt.savefig(args.output)
+    else:
+        plt.show()
