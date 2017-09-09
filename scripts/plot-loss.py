@@ -17,6 +17,7 @@ parser.add_argument('--no-x', action='store_true', help='Run with no X server')
 parser.add_argument('--txt', action='store_true')
 parser.add_argument('--stride', type=int)
 parser.add_argument('-n', '--max-values', type=int, default=15)
+parser.add_argument('--shortest', action='store_true')
 
 args = parser.parse_args()
 
@@ -159,7 +160,10 @@ if args.txt:
         i += 1
 
         steps = [set([step for step, value in values_]) for values_ in values]
-        steps = sorted(list(set.intersection(*steps)))
+        if args.shortest:
+            steps = sorted(list(set.intersection(*steps)))
+        else:
+            steps = sorted(list(set.union(*steps)))
 
         if args.stride:
             steps = steps[args.stride - 1::args.stride]
@@ -170,9 +174,10 @@ if args.txt:
         
         print(fmt.format(score_label), ''.join('{:>7}'.format(step) for step in steps))
         for model_label, values_ in zip(labels, values):
-            values_ = [value for step, value in values_ if step in steps_]
-            best_value = max(values_) if score_name == 'bleu' else min(values_)
-            s = ['{:>7.2f}'.format(x) for x in values_]
+            values_ = dict(values_)
+            best_value = max(values_.values()) if score_name == 'bleu' else min(values_.values())
+            values_ = [values_.get(step) for step in steps]
+            s = ['{:7>}'.format('') if x is None else '{:>7.2f}'.format(x) for x in values_]
             s = [boldify(y) if x == best_value else y for x, y in zip(values_, s)]
             print(fmt.format(model_label), ''.join(s))
 else:
