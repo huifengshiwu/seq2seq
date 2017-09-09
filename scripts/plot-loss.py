@@ -20,7 +20,7 @@ parser.add_argument('-n', '--max-values', type=int, default=15)
 args = parser.parse_args()
 
 
-args.log_files = [os.path.join(log_file, 'config.yaml') if os.path.isdir(log_file) else log_file
+args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                   for log_file in args.log_files]
 
 if not args.text:
