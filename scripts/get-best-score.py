@@ -4,6 +4,7 @@ import itertools
 import argparse
 import re
 import os
+import sys
 import dateutil.parser
 
 parser = argparse.ArgumentParser()
@@ -11,8 +12,9 @@ parser.add_argument('log_files', nargs='+')
 parser.add_argument('--dev-prefix')
 parser.add_argument('--score', default='bleu', choices=('ter', 'bleu', 'wer'))
 parser.add_argument('--task-name')
+parser.add_argument('--time', action='store_true')
 
-def print_scores(log_file):
+def print_scores(log_file, time=False, label=None):
     with open(log_file) as log_file:
         scores = {}
         times = {}
@@ -21,6 +23,8 @@ def print_scores(log_file):
         starting_time = None
 
         def read_time(line):
+            if not time:
+                return None
             m = re.match('../.. ..:..:..', line)
             if m:
                 return dateutil.parser.parse(m.group(0))
@@ -66,18 +70,46 @@ def print_scores(log_file):
         keys = [args.score, 'bleu', 'ter', 'wer', 'penalty', 'ratio']
         best = sorted(best.items(), key=lambda p: keys.index(p[0]))
 
-        total_time = (times[max_step] - starting_time).total_seconds() / 3600
-        train_time = (times[step] - starting_time).total_seconds() / 3600
+        if time:
+            total_time = (times[max_step] - starting_time).total_seconds() / 3600
+            train_time = (times[step] - starting_time).total_seconds() / 3600
+            time_string = ' hours={:.1f}/{:.1f}'.format(train_time, total_time)
+        else:
+            time_string = ''
 
-        print(' '.join(itertools.starmap('{}={:.2f}'.format, best)),
-              'step={}/{}'.format(step, max_step),
-              'hours={:.1f}/{:.1f}'.format(train_time, total_time))
+        if label is None:
+            label = ''
+        print(label + ' '.join(itertools.starmap('{}={:.2f}'.format, best)),
+              'step={}/{}'.format(step, max_step) + time_string)
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
+                      for log_file in args.log_files]
 
-    for log_file in args.log_files:
-        if os.path.isdir(log_file):
-            log_file = os.path.join(log_file, 'log.txt')
-        print_scores(log_file)
+    labels = None
+    if not labels:
+        filenames = [os.path.basename(log_file) for log_file in args.log_files]
+        if len(set(filenames)) == len(filenames):
+            labels = filenames
+    if not labels:
+        dirnames = [os.path.basename(os.path.dirname(log_file)) for log_file in args.log_files]
+        if len(set(dirnames)) == len(dirnames):
+            labels = dirnames
+    if not labels:
+        labels = ['model_{}'.format(i) for i in range(1, len(args.log_files) + 1)]
+
+    label_len = max(map(len, labels))
+    format_string = '{{:<{}}}'.format(label_len + 2)
+
+    for label, log_file in zip(labels, args.log_files):
+        try:
+            if len(args.log_files) == 1:
+                label = None
+            else:
+                label = format_string.format(label + ':')
+
+            print_scores(log_file, time=args.time, label=label)
+        except:
+            pass
 
