@@ -2,6 +2,7 @@
 import argparse
 import re
 import os
+import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument('log_files', nargs='+')
@@ -9,11 +10,11 @@ parser.add_argument('--output')
 parser.add_argument('--max-steps', type=int, default=0)
 parser.add_argument('--min-steps', type=int, default=0)
 parser.add_argument('--labels', nargs='+')
-parser.add_argument('--plot', nargs='+', default=('train', 'dev'))
+parser.add_argument('--plot', nargs='+')
 parser.add_argument('--average', type=int, nargs='+')
 parser.add_argument('--smooth', type=int)
 parser.add_argument('--no-x', action='store_true', help='Run with no X server')
-parser.add_argument('--text', action='store_true')
+parser.add_argument('--txt', action='store_true')
 parser.add_argument('--stride', type=int)
 parser.add_argument('-n', '--max-values', type=int, default=15)
 
@@ -23,11 +24,21 @@ args = parser.parse_args()
 args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                   for log_file in args.log_files]
 
-if not args.text:
-    import matplotlib
-    if args.no_x:
-        matplotlib.use('Agg')
-    from matplotlib import pyplot as plt
+if not args.plot:
+    if args.txt:
+        args.plot = ('bleu',)
+    else:
+        args.plot = ('dev', 'train')
+
+if not args.txt:
+    try:
+        import matplotlib
+        if args.no_x:
+            matplotlib.use('Agg')
+        from matplotlib import pyplot as plt
+    except ImportError:
+        sys.stderr.write('failed to import matplotlib: reverting to txt mode\n')
+        args.txt = True
 
 args.plot = [x.lower() for x in args.plot]
 
@@ -36,17 +47,23 @@ if args.average:
 
 n = len(args.average) if args.average else len(args.log_files)
 
+labels = None
 if args.labels:
     if len(args.labels) != n:
         raise Exception('error: wrong number of labels')
     labels = args.labels
-else:
-    dirnames = [os.path.basename(os.path.dirname(log_file)) for log_file in args.log_files]
-    if len(set(dirnames)) == len(dirnames):
-        labels = dirnames
-    else:
-        labels = ['model {}'.format(i) for i in range(1, n + 1)]
 
+if not labels:
+    dirnames = [os.path.basename(os.path.dirname(log_file)) for log_file in args.log_files]
+    if all(dirnames) and len(set(dirnames)) == len(dirnames):
+        labels = dirnames
+
+if not labels:
+    filenames = [os.path.basename(log_file) for log_file in args.log_files]
+    if all(filenames) and len(set(filenames)) == len(filenames):
+        labels = filenames
+
+labels = labels or ['model {}'.format(i) for i in range(1, n + 1)]
 data = []
 
 for log_file in args.log_files:
@@ -118,21 +135,6 @@ if args.average:
     data = new_data
 
 
-def plot(data, label, linestyle=None):
-    if not args.text:
-        plt.plot(*data, linestyle=linestyle, label=label)
-    else:
-        steps, values = list(data)
-        if args.stride:
-            steps = steps[::args.stride]
-            values = values[::args.stride]
-        if args.max_values:
-            steps = steps[:args.max_values]
-            values = values[:args.max_values]
-
-        s = ''.join('{:>7.2f}'.format(x) for x in values) 
-        print('{:>10}'.format(label), s)
-
 score_names = ['bleu', 'ter', 'dev', 'train']
 score_labels = ['BLEU', 'TER', 'dev loss', 'train loss']
 linestyles = [':', ':', '--', None]
@@ -140,11 +142,21 @@ linestyles = [':', ':', '--', None]
 def boldify(text):
     return '\033[1m' + text + '\033[0m'
 
-if args.text:
+if args.txt:
     data = list(zip(*data))
+
+    l = max(len(label) for name, label in zip(score_names, score_labels) if name in args.plot)
+    l = max(l, max(map(len, labels)))
+    fmt = '{{:<{}}}'.format(l)
+
+    i = 0
     for score_name, score_label, values in zip(score_names, score_labels, data):
         if score_name not in args.plot or not values or not any(values):
             continue
+
+        if i > 0:
+            print()
+        i += 1
 
         steps = [set([step for step, value in values_]) for values_ in values]
         steps = sorted(list(set.intersection(*steps)))
@@ -155,15 +167,14 @@ if args.text:
             steps = steps[:args.max_values]
 
         steps_ = set(steps)
-
-        print('{:<10}'.format(score_label), ''.join('{:>7}'.format(step) for step in steps))
+        
+        print(fmt.format(score_label), ''.join('{:>7}'.format(step) for step in steps))
         for model_label, values_ in zip(labels, values):
             values_ = [value for step, value in values_ if step in steps_]
             best_value = max(values_) if score_name == 'bleu' else min(values_)
             s = ['{:>7.2f}'.format(x) for x in values_]
             s = [boldify(y) if x == best_value else y for x, y in zip(values_, s)]
-            print('{:<10}'.format(model_label), ''.join(s))
-        print()
+            print(fmt.format(model_label), ''.join(s))
 else:
     for label, data_ in zip(labels, data):
         for score_name, score_label, linestyle, values in zip(score_names, score_labels, linestyles, data_):
