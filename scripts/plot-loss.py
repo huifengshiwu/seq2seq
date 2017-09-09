@@ -176,7 +176,10 @@ if args.txt:
         for model_label, values_ in zip(labels, values):
             values_ = dict(values_)
             values_ = [values_.get(step) for step in steps]
-            best_value = max(filter(None, values_)) if score_name == 'bleu' else min(filter(None, values_))
+            try:
+                best_value = max(filter(None, values_)) if score_name == 'bleu' else min(filter(None, values_))
+            except ValueError:
+                best_value = 0
             s = ['{:7>}'.format('') if x is None else '{:>7.2f}'.format(x) for x in values_]
             s = [boldify(y) if x == best_value else y for x, y in zip(values_, s)]
             print(fmt.format(model_label), ''.join(s))
