@@ -5,7 +5,6 @@ import argparse
 import re
 import os
 import sys
-import dateutil.parser
 
 parser = argparse.ArgumentParser()
 parser.add_argument('log_files', nargs='+')
@@ -86,6 +85,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                       for log_file in args.log_files]
+
+    if args.time:
+        import dateutil.parser
 
     labels = None
     if not labels:
