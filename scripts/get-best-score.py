@@ -12,6 +12,7 @@ parser.add_argument('--dev-prefix')
 parser.add_argument('--score', default='bleu', choices=('ter', 'bleu', 'wer'))
 parser.add_argument('--task-name')
 parser.add_argument('--time', action='store_true')
+parser.add_argument('--params', action='store_true')
 
 def print_scores(log_file, time=False, label=None):
     with open(log_file) as log_file:
@@ -20,6 +21,7 @@ def print_scores(log_file, time=False, label=None):
         current_step = 0
         max_step = 0
         starting_time = None
+        param_count = None
 
         def read_time(line):
             if not time:
@@ -31,6 +33,10 @@ def print_scores(log_file, time=False, label=None):
         for line in log_file:
             if starting_time is None:
                 starting_time = read_time(line)
+            if param_count is None:
+                m = re.search('number of parameters: (.*)', line)
+                if m:
+                    param_count = m.group(1)
 
             m = re.search('step (\d+)', line)
             if m:
@@ -69,17 +75,38 @@ def print_scores(log_file, time=False, label=None):
         keys = [args.score, 'bleu', 'ter', 'wer', 'penalty', 'ratio']
         best = sorted(best.items(), key=lambda p: keys.index(p[0]))
 
+        def pretty_time(seconds):
+            seconds = int(seconds)
+            s = []
+            days, seconds = divmod(seconds, 3600 * 24)
+            if days > 0:
+                s.append('{}d'.format(days))
+            hours, seconds = divmod(seconds, 3600)
+            if hours > 0:
+                s.append('{}h'.format(hours))
+            minutes, seconds = divmod(seconds, 60)
+            if minutes > 0 and days == 0:
+                s.append('{}min'.format(minutes))
+            if days == 0 and hours == 0 and minutes < 5 and seconds > 0:
+                s.append('{}s'.format(seconds))
+            return ''.join(s)
+
         if time:
-            total_time = (times[max_step] - starting_time).total_seconds() / 3600
-            train_time = (times[step] - starting_time).total_seconds() / 3600
-            time_string = ' hours={:.1f}/{:.1f}'.format(train_time, total_time)
+            total_time = (times[max_step] - starting_time).total_seconds()
+            train_time = (times[step] - starting_time).total_seconds()
+            time_string = ' time={}/{}'.format(pretty_time(train_time), pretty_time(total_time))
         else:
             time_string = ''
 
         if label is None:
             label = ''
+        if args.params and param_count is not None:
+            param_string = ' params={}'.format(param_count)
+        else:
+            param_string = ''
+
         print(label + ' '.join(itertools.starmap('{}={:.2f}'.format, best)),
-              'step={}/{}'.format(step, max_step) + time_string)
+              'step={}/{}'.format(step, max_step) + param_string + time_string)
 
 if __name__ == '__main__':
     args = parser.parse_args()
