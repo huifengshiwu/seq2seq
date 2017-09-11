@@ -3,6 +3,7 @@ import math
 from tensorflow.contrib.rnn import BasicLSTMCell, RNNCell, DropoutWrapper, MultiRNNCell
 from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell, DropoutGRUCell
 from translate import utils, beam_search
+from translate.conv_lstm import BasicConvLSTMCell
 
 
 def auto_reuse(fun):
@@ -168,6 +169,14 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 time_steps = tf.shape(encoder_inputs_)[1]
 
                 encoder_inputs_ = tf.reshape(encoder_inputs_, [batch_size, time_steps, feature_size * channels])
+
+                if encoder.conv_lstm_size:
+                    cell = BasicConvLSTMCell([feature_size, channels], encoder.conv_lstm_size, 1)
+                    encoder_inputs_, _ = tf.nn.bidirectional_dynamic_rnn(
+                        cell, cell, encoder_inputs_,
+                        dtype=tf.float32
+                    )
+                    encoder_inputs_ = tf.concat(encoder_inputs_, axis=2)
 
             if encoder.convolutions:
                 if encoder.binary:
