@@ -140,7 +140,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.input_layers:
                 for j, layer_size in enumerate(encoder.input_layers):
-                    if encoder.input_layer_activation.lower() == 'relu':
+                    if encoder.input_layer_activation is not None and encoder.input_layer_activation.lower() == 'relu':
                         activation = tf.nn.relu
                     else:
                         activation = tf.tanh

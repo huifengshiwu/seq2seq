@@ -3,7 +3,7 @@ Attention-based sequence to sequence learning
 
 ## Dependencies
 
-* [TensorFlow 1.2 for Python 3](https://www.tensorflow.org/get_started/os_setup.html)
+* [TensorFlow 1.2+ for Python 3](https://www.tensorflow.org/get_started/os_setup.html)
 * YAML and Matplotlib modules for Python 3: `sudo apt-get install python3-yaml python3-matplotlib`
 
 
