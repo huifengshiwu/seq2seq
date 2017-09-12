@@ -9,10 +9,15 @@ import sys
 parser = argparse.ArgumentParser()
 parser.add_argument('log_files', nargs='+')
 parser.add_argument('--dev-prefix')
-parser.add_argument('--score', default='bleu', choices=('ter', 'bleu', 'wer'))
+parser.add_argument('--score', choices=('ter', 'bleu', 'wer'))
 parser.add_argument('--task-name')
 parser.add_argument('--time', action='store_true')
 parser.add_argument('--params', action='store_true')
+
+parser.add_argument('--ter', action='store_true')
+parser.add_argument('--bleu', action='store_true')
+parser.add_argument('--wer', action='store_true')
+
 
 def print_scores(log_file, time=False, label=None):
     with open(log_file) as log_file:
@@ -112,6 +117,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                       for log_file in args.log_files]
+
+    if args.ter:
+        args.score = 'ter'
+    elif args.wer:
+        args.score = 'wer'
+    elif args.bleu or args.score is None:
+        args.score = 'bleu'
 
     if args.time:
         import dateutil.parser

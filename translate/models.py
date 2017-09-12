@@ -140,7 +140,12 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.input_layers:
                 for j, layer_size in enumerate(encoder.input_layers):
-                    encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=tf.tanh, use_bias=True,
+                    if encoder.input_layer_activation.lower() == 'relu':
+                        activation = tf.nn.relu
+                    else:
+                        activation = tf.tanh
+
+                    encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=activation, use_bias=True,
                                             name='layer_{}'.format(j))
                     if encoder.use_dropout:
                         encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)

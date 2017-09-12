@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import logging
 import argparse
@@ -16,41 +17,41 @@ from translate.multitask_model import MultiTaskModel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('config', help='load a configuration file in the YAML format')
-parser.add_argument('-v', '--verbose', help='verbose mode', action='store_true')
-# use 'store_const' instead of 'store_true' so that the default value is `None` instead of `False`
-parser.add_argument('--reset', help="reset model (don't load any checkpoint)", action='store_const', const=True)
-parser.add_argument('--reset-learning-rate', help='reset learning rate', action='store_const', const=True)
+parser.add_argument('-v', '--verbose', action='store_true', help='verbose mode')
+# using 'store_const' instead of 'store_true' so that the default value is `None` instead of `False`
+parser.add_argument('--reset', action='store_const', const=True, help="reset model (don't load any checkpoint)")
+parser.add_argument('--reset-learning-rate', action='store_const', const=True, help='reset learning rate')
 parser.add_argument('--learning-rate', type=float, help='custom learning rate (triggers `reset-learning-rate`)')
-parser.add_argument('--purge', help='remove previous model files', action='store_true')
+parser.add_argument('--purge', action='store_true', help='remove previous model files')
 
 # Available actions (exclusive)
-parser.add_argument('--decode', help='translate this corpus (one filename for each encoder)', nargs='*')
-parser.add_argument('--align', help='translate and show alignments by the attention mechanism', nargs='*')
-parser.add_argument('--eval', help='compute BLEU score on this corpus (source files and target file)', nargs='*')
-parser.add_argument('--train', help='train an NMT model', action='store_true')
+parser.add_argument('--decode', nargs='*', help='translate this corpus (corpus name or list of files for each encoder)')
+parser.add_argument('--align', nargs='*', help='translate and show alignments by the attention mechanism')
+parser.add_argument('--eval', nargs='*', help='compute BLEU score on this corpus (corpus name or source files and target file)')
+parser.add_argument('--train', action='store_true', help='train an NMT model')
 
 # TensorFlow configuration
 parser.add_argument('--gpu-id', type=int, help='index of the GPU where to run the computation')
 parser.add_argument('--no-gpu', action='store_true', help='run on CPU')
 
 # Decoding options (to avoid having to edit the config file)
-parser.add_argument('--beam-size', type=int)
-parser.add_argument('--len-normalization', type=float)
-parser.add_argument('--no-early-stopping', action='store_const', dest='early_stopping', const=False)
-parser.add_argument('--ensemble', action='store_const', const=True)
-parser.add_argument('--average', action='store_const', const=True)
-parser.add_argument('--checkpoints', nargs='+')
-parser.add_argument('--output')
-parser.add_argument('--max-steps', type=int)
-parser.add_argument('--max-test-size', type=int)
-parser.add_argument('--remove-unk', action='store_const', const=True)
-parser.add_argument('--raw-output', action='store_const', const=True)
-parser.add_argument('--pred-edits', action='store_const', const=True)
-parser.add_argument('--model-dir')
-parser.add_argument('--batch-size', type=int)
-parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False)
+parser.add_argument('--beam-size', type=int, help='decode using a beam-search decoder with this beam-size (default: greedy)')
+parser.add_argument('--len-normalization', type=float, help='normalize final beam scores by hypothesis length with this weight (default: 1, disable: 0)')
+parser.add_argument('--no-early-stopping', action='store_const', dest='early_stopping', const=False, help='disable early stopping (which reduces the beam size each time a new finished hypothesis is found)')
+parser.add_argument('--ensemble', action='store_const', const=True, help='build an ensemble of models with the list of checkpoints')
+parser.add_argument('--average', action='store_const', const=True, help='average all parameters from the list of checkpoints')
+parser.add_argument('--checkpoints', nargs='+', help='load this list of checkpoints instead of latest checkpoint')
+parser.add_argument('--output', help='write decoding output to this file (instead of standard output)')
+parser.add_argument('--max-steps', type=int, help='maximum training updates before stopping')
+parser.add_argument('--max-test-size', type=int, help='only decode the first n lines from the test corpus')
+parser.add_argument('--remove-unk', action='store_const', const=True, help='remove UNK symbols from decoding output')
+parser.add_argument('--raw-output', action='store_const', const=True, help='write raw decoding output (no post-processing)')
+parser.add_argument('--pred-edits', action='store_const', const=True, help='predict edit operations instead of words (useful for automatic post-editing')
+parser.add_argument('--model-dir', help='use this directory as model root')
+parser.add_argument('--batch-size', type=int, help='number of lines in a batch')
+parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False, help='disable automatic fixing of edit op sequences')
 
-parser.add_argument('--align-encoder-id', type=int, default=0)
+parser.add_argument('--align-encoder-id', type=int, default=0, help='id of the encoder whose attention outputs we are interested in (only useful in the multi-encoder setting)')
 
 def main(args=None):
     args = parser.parse_args(args)
@@ -84,7 +85,7 @@ def main(args=None):
         'you need to specify at least one action (decode, eval, align, or train)')
     assert not (args.average and args.ensemble)
 
-    if args.purge:
+    if args.train and args.purge:
         utils.log('deleting previous model')
         shutil.rmtree(config.model_dir, ignore_errors=True)
 
@@ -92,17 +93,20 @@ def main(args=None):
 
     # copy config file to model directory
     config_path = os.path.join(config.model_dir, 'config.yaml')
-    if not os.path.exists(config_path):
-        shutil.copy(args.config, config_path)
+    if args.train and not os.path.exists(config_path):
+        with open(args.config) as config_file, open(config_path, 'w') as dest_file:
+            content = config_file.read()
+            content = re.sub(r'model_dir:.*?\n', 'model_dir: {}\n'.format(args.model_dir), content, flags=re.MULTILINE)
+            dest_file.write(content)
 
     # also copy default config
     config_path = os.path.join(config.model_dir, 'default.yaml')
-    if not os.path.exists(config_path):
+    if args.train and not os.path.exists(config_path):
         shutil.copy('config/default.yaml', config_path)
 
     # copy source code to model directory
     tar_path =  os.path.join(config.model_dir, 'code.tar.gz')
-    if not os.path.exists(tar_path):
+    if args.train and not os.path.exists(tar_path):
         with tarfile.open(tar_path, "w:gz") as tar:
             for filename in os.listdir('translate'):
                 if filename.endswith('.py'):

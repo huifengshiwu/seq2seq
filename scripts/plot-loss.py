@@ -13,7 +13,7 @@ parser.add_argument('--labels', nargs='+')
 
 parser.add_argument('--no-x', action='store_true', help='Run with no X server')
 
-parser.add_argument('--txt', action='store_true')
+parser.add_argument('--txt', '--text', action='store_true')
 parser.add_argument('--stride', type=int)
 parser.add_argument('-n', '--max-values', type=int, default=15)
 parser.add_argument('--shortest', action='store_true')
