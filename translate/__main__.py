@@ -96,7 +96,8 @@ def main(args=None):
     if args.train and not os.path.exists(config_path):
         with open(args.config) as config_file, open(config_path, 'w') as dest_file:
             content = config_file.read()
-            content = re.sub(r'model_dir:.*?\n', 'model_dir: {}\n'.format(args.model_dir), content, flags=re.MULTILINE)
+            content = re.sub(r'model_dir:.*?\n', 'model_dir: {}\n'.format(config.model_dir), content,
+                             flags=re.MULTILINE)
             dest_file.write(content)
 
     # also copy default config

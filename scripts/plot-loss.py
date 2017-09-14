@@ -134,8 +134,8 @@ for log_file in args.log_files:
 metric_labels = {
     'bleu': 'BLEU',
     'ter': 'TER',
-    'dev': 'dev loss',
-    'train': 'train loss'
+    'dev': 'Dev Loss',
+    'train': 'Train Loss'
 }
 
 def boldify(text):
@@ -214,7 +214,7 @@ else:
     ax_left.set_ylabel(metric_labels[args.plot[0]])
     if len(axes) > 1:
         label = ', '.join(metric_labels[name] for name in args.plot[1:])
-        label = label.replace('dev loss, train loss', 'dev/train loss')
+        label = label.replace('Dev Loss, Train Loss', 'Dev/Train Loss')
         ax_right.set_ylabel(label)
 
     for i, (name, values) in enumerate(data.items()):
@@ -235,7 +235,7 @@ else:
     labels += [metric_labels[name] for name in data]
 
     fig.tight_layout()
-    plt.legend(lines, labels, loc='best', shadow=True)
+    plt.legend(lines, labels, loc='best', framealpha=0.3)
 
     if args.output is not None:
         plt.savefig(args.output)

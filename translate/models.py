@@ -668,14 +668,16 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         output_ = tf.concat(projection_input, axis=1)
 
         if decoder.pred_deep_layer:
+            deep_layer_size = decoder.pred_deep_layer_size or decoder.embedding_size
             if decoder.layer_norm:
-                output_ = dense(output_, decoder.embedding_size, use_bias=False, name='deep_output')
+                output_ = dense(output_, deep_layer_size, use_bias=False, name='deep_output')
                 output_ = tf.contrib.layers.layer_norm(output_, activation_fn=tf.nn.tanh, scope='output_layer_norm')
             else:
-                output_ = dense(output_, decoder.embedding_size, activation=tf.tanh, use_bias=True, name='deep_output')
+                output_ = dense(output_, deep_layer_size, activation=tf.tanh, use_bias=True, name='deep_output')
         else:
             if decoder.pred_maxout_layer:
-                output_ = dense(output_, decoder.cell_size, use_bias=True, name='maxout')
+                maxout_size = decoder.maxout_size or decoder.cell_size
+                output_ = dense(output_, maxout_size, use_bias=True, name='maxout')
                 if decoder.old_maxout:  # for back-compatibility with old models
                     output_ = tf.nn.pool(tf.expand_dims(output_, axis=2), window_shape=[2], pooling_type='MAX',
                                          padding='SAME', strides=[2])
