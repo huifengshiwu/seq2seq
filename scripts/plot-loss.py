@@ -4,6 +4,8 @@ import re
 import os
 import sys
 import itertools
+import subprocess
+import math
 from collections import OrderedDict
 
 parser = argparse.ArgumentParser()
@@ -18,7 +20,8 @@ parser.add_argument('--no-x', action='store_true', help='Run with no X server')
 parser.add_argument('--txt', '--text', action='store_true')
 parser.add_argument('--stride', type=int)
 parser.add_argument('-n', type=int, default=15, dest='max_values')
-parser.add_argument('--shortest', action='store_true')
+parser.add_argument('--intersection', action='store_true')
+
 parser.add_argument('--avg', action='store_true')
 parser.add_argument('--best', action='store_true')
 
@@ -28,8 +31,16 @@ parser.add_argument('--ter', action='store_true')
 parser.add_argument('--dev-loss', action='store_true')
 parser.add_argument('--train-loss', action='store_true')
 
+parser.add_argument('--print-latest', action='store_true')
+parser.add_argument('--print-best', action='store_true')
+parser.add_argument('--print-diff', action='store_true')
+parser.add_argument('--auto', action='store_true')
+
 args = parser.parse_args()
 
+if args.auto:
+    args.txt = True
+    args.best = True
 
 args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                   for log_file in args.log_files]
@@ -148,6 +159,15 @@ if args.txt:
     l = max(l, max(map(len, labels)))
     fmt = '{{:<{}}}'.format(l)
 
+    cols = None
+    if args.auto:
+        cols = int(subprocess.check_output(['tput', 'cols']))
+        cols = (cols - (l + 2)) // 7
+        if args.print_best:
+            cols -= 1
+        if args.print_latest:
+            cols -= 1
+
     i = 0
     for name, values in data.items():
         if i > 0:
@@ -155,13 +175,17 @@ if args.txt:
         i += 1
 
         steps = [set([step for step, value in values_]) for values_ in values]
-        if args.shortest:
+        if args.intersection:
             steps = sorted(list(set.intersection(*steps)))
         else:
             steps = sorted(list(set.union(*steps)))
 
         steps = [step for step in steps if step >= args.min_steps]
         steps = [step for step in steps if args.max_steps == 0 or step <= args.max_steps]
+
+        if args.auto:
+            args.stride = int(math.ceil(len(steps) / cols))
+            args.max_values = cols
 
         if args.stride:
             if args.min_steps:  # we want to include the first value
@@ -172,19 +196,33 @@ if args.txt:
         if args.max_values:
             steps = steps[:args.max_values]
 
-        steps_ = set(steps)
-        
-        print(fmt.format(metric_labels[name]), ''.join('{:>7}'.format(step) for step in steps))
+        steps_ = list(steps)
+        if args.print_best:
+            steps_.append('best')
+        if args.print_latest:
+            steps_.append('latest')
+
+        print(fmt.format(metric_labels[name]), ''.join('{:>7}'.format(step) for step in steps_))
         for model_label, values_ in zip(labels, values):
             values__ = []
+
+            get_best = max if name == 'bleu' else min
+            try:
+                _, latest_value = values_[-1]
+            except IndexError:
+                latest_value = None
+    
+            try:
+                best_value = get_best(value for step, value in values_)
+            except ValueError:
+                best_value = None
+
             for min_step, max_step in zip([-1] + steps, steps):
                 a = [value for step, value in values_ if min_step < step <= max_step]
                 if not a:
                     a = None
-                elif args.best and name == 'bleu':
-                    a = max(a)
                 elif args.best:
-                    a = min(a)
+                    a = get_best(a)
                 elif args.avg:
                     a = sum(a) / len(a)
                 else:
@@ -192,12 +230,23 @@ if args.txt:
                 values__.append(a)
             values_ = values__
 
-            try:
-                best_value = max(filter(None, values_)) if name == 'bleu' else min(filter(None, values_))
-            except ValueError:
-                best_value = 0
-            s = ['{:>7}'.format('') if x is None else '{:>7.2f}'.format(x) for x in values_]
-            s = [boldify(y) if x == best_value else y for x, y in zip(values_, s)]
+            if args.print_best:
+                values_.append(best_value)
+            if args.print_latest:
+                values_.append(latest_value)
+
+            s = []
+            for x in values_:
+                if x is None:
+                    y = ' ' * 7
+                elif args.print_diff and x != best_value:
+                    y = '{:>+7.1f}'.format(x - best_value)
+                else:
+                    y = '{:>7.2f}'.format(x)
+                if x == best_value:
+                    y = boldify(y)
+                s.append(y)
+
             print(fmt.format(model_label), ''.join(s))
 else:
     linestyles = [':', '--', '-.']
