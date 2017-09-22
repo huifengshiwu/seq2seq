@@ -134,7 +134,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 encoder_inputs_ = tf.concat([encoder_inputs_, other_inputs], axis=2)
 
             if encoder.use_dropout:
-                noise_shape = [1, time_steps, 1] if encoder.pervasive_dropout else [batch_size, time_steps, 1]
+                size = tf.shape(encoder_inputs_)[2]
+                noise_shape = [1, 1, size] if encoder.pervasive_dropout else [batch_size, time_steps, size]
                 encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.word_keep_prob,
                                                 noise_shape=noise_shape)
 
@@ -182,6 +183,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                         dtype=tf.float32
                     )
                     encoder_inputs_ = tf.concat(encoder_inputs_, axis=2)
+
+            # TODO: dropout after conv
 
             if encoder.convolutions:
                 if encoder.binary:
@@ -378,7 +381,7 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
 
         T = encoder.attn_temperature or 1.0
-        exp = tf.exp(T * e) * mask
+        exp = tf.exp(e / T) * mask
         weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
         weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
 
@@ -674,6 +677,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                 output_ = tf.contrib.layers.layer_norm(output_, activation_fn=tf.nn.tanh, scope='output_layer_norm')
             else:
                 output_ = dense(output_, deep_layer_size, activation=tf.tanh, use_bias=True, name='deep_output')
+
+            if decoder.use_dropout:
+                size = tf.shape(output_)[1]
+                noise_shape = [1, size] if decoder.pervasive_dropout else [batch_size, size]
+                output_ = tf.nn.dropout(output_, keep_prob=decoder.deep_layer_keep_prob, noise_shape=noise_shape)
         else:
             if decoder.pred_maxout_layer:
                 maxout_size = decoder.maxout_size or decoder.cell_size
@@ -731,13 +739,20 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     else:
         initial_output = initial_state[:, -decoder.cell_size:]
 
-    initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights], axis=1)
+    initial_context, _ = look(initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights)
+    initial_data = tf.concat([initial_state, initial_context, tf.expand_dims(initial_pos, axis=1), initial_weights],
+                             axis=1)
+    context_size = initial_context.shape[1].value
 
-    def get_logits(state, ids):  # for beam-search decoding
+    def get_logits(state, ids, time):  # for beam-search decoding
         with tf.variable_scope('decoder_{}'.format(decoder.name)):
-            state, pos, prev_weights = tf.split(state, [state_size, 1, -1], axis=1)
-            pos = tf.squeeze(pos, axis=1)
+            state, context, pos, prev_weights = tf.split(state, [state_size, context_size, 1, -1], axis=1)
             input_ = embed(ids)
+
+            pos = tf.squeeze(pos, axis=1)
+            pos = tf.cond(tf.equal(time, 0),
+                          lambda: pos,
+                          lambda: update_pos(pos, ids, encoder_input_length[align_encoder_id]))
 
             if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
                 output = state
@@ -751,6 +766,10 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                     output, state = update(state, input_)
             elif decoder.update_first:
                 output, state = update(state, input_, None, ids)
+            elif decoder.generate_first:
+                output, state = tf.cond(tf.equal(time, 0),
+                                        lambda: (output, state),
+                                        lambda: update(state, input_, context, ids))
 
             context, new_weights = look(output, input_, pos=pos, prev_weights=prev_weights)
 
@@ -761,15 +780,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                 output, state = update(state, input_, context, ids)
 
             logits = generate(output, input_, context)
-            predicted_symbol = tf.argmax(logits, 1)
-            input_ = embed(predicted_symbol)
-            pos = update_pos(pos, predicted_symbol, encoder_input_length[align_encoder_id])
-
-            if not decoder.conditional_rnn and not decoder.update_first and decoder.generate_first:
-                _, state = update(state, input_, context, predicted_symbol)
 
             pos = tf.expand_dims(pos, axis=1)
-            state = tf.concat([state, pos, new_weights], axis=1)
+            state = tf.concat([state, context, pos, new_weights], axis=1)
             return state, logits
 
     def _time_step(time, input_, input_symbol, pos, state, output, outputs, states, weights, attns, prev_weights,

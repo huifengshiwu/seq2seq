@@ -59,8 +59,14 @@ def batch_gather(tensor, indices):
     return output
 
 
+def log_softmax(x, axis, temperature=None):
+    T = temperature or 1.0
+    my_max = tf.reduce_max(x/T, axis=axis, keep_dims=True)
+    return x - (tf.log(tf.reduce_sum(tf.exp(x/T - my_max), axis, keep_dims=True)) + my_max)
+
+
 def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, len_normalization=None,
-                    early_stopping=True):
+                    early_stopping=True, temperature=None):
     """
     :param update_funs: function to compute the next state and logits given the current state and previous ids
     :param initial_states: recurrent model states
@@ -102,14 +108,14 @@ def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, le
 
             scope = tf.get_variable_scope() if len(states) == 1 else 'model_{}'.format(k)
             with tf.variable_scope(scope, reuse=True):
-                state, logits_ = update_fun(state, ids)
+                state, logits_ = update_fun(state, ids, i)
 
             state = tf.reshape(state, [batch_size, beam_width, tf.shape(state)[1]])
             new_states.append(state)
 
             num_classes = logits_.shape.as_list()[-1]
             logits_ = tf.reshape(logits_, [batch_size, beam_width, num_classes])
-            logits_ = logits_ - tf.reduce_logsumexp(logits_, axis=2, keep_dims=True)
+            logits_ = log_softmax(logits_, axis=2, temperature=temperature)
 
             if logits is None:
                 logits = logits_
@@ -124,6 +130,9 @@ def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, le
             finished_hypotheses_ = tf.concat([sel_ids, pad], axis=2)
             finished_scores_ = sel_sum_logprobs + logits[:,:,utils.EOS_ID]
             logits = logits[:,:,utils.EOS_ID + 1:]  # FIXME, only works if EOS is before any other symbol that matters
+        else:
+            finished_scores_ = None
+            finished_hypotheses_ = None
 
         sum_logprobs = (tf.expand_dims(sel_sum_logprobs, axis=2) + (logits * tf.expand_dims(mask, axis=2)))
 

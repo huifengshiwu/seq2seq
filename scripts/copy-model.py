@@ -4,6 +4,7 @@ import subprocess
 import os
 import shutil
 import re
+import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument('model_dir')
@@ -24,6 +25,12 @@ if os.path.exists(args.dest_dir):
 if not os.path.isdir(args.model_dir):
     raise Exception
 
+config_dir = os.path.realpath(args.dest_dir)
+root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+if config_dir.startswith(root_dir):
+    config_dir = config_dir[len(root_dir):]
+else:
+    config_dir = args.dest_dir
 
 if args.compact:
     os.makedirs(os.path.join(args.dest_dir, 'checkpoints'))

@@ -17,6 +17,8 @@ class Seq2SeqModel(object):
                  use_baseline=True, reverse_input=False, moving_average=None, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
+        self.temperature = self.decoders[0].temperature
+
         self.name = name
 
         self.learning_rate = learning_rate
@@ -35,7 +37,7 @@ class Seq2SeqModel(object):
         if use_dropout:
             for encoder_or_decoder in encoders + decoders:
                 names = ['rnn_input', 'rnn_output', 'rnn_state', 'initial_state', 'word', 'input_layer', 'output',
-                         'attn']
+                         'attn', 'deep_layer']
 
                 for name in names:
                     value = encoder_or_decoder.get(name + '_dropout')
@@ -117,7 +119,7 @@ class Seq2SeqModel(object):
             beam_funs = [model.beam_fun for model in models]
             initial_data = [model.initial_data for model in models]
             beam_output = beam_search.rnn_beam_search(beam_funs, initial_data, self.max_output_len[0], beam_size,
-                                                      len_normalization, early_stopping)
+                                                      len_normalization, early_stopping, temperature=self.temperature)
             self.beam_outputs, self.beam_scores = beam_output
 
     @staticmethod

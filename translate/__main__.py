@@ -18,6 +18,8 @@ from translate.multitask_model import MultiTaskModel
 parser = argparse.ArgumentParser()
 parser.add_argument('config', help='load a configuration file in the YAML format')
 parser.add_argument('-v', '--verbose', action='store_true', help='verbose mode')
+parser.add_argument('--debug', action='store_true', help='debug mode')
+
 # using 'store_const' instead of 'store_true' so that the default value is `None` instead of `False`
 parser.add_argument('--reset', action='store_const', const=True, help="reset model (don't load any checkpoint)")
 parser.add_argument('--reset-learning-rate', action='store_const', const=True, help='reset learning rate')
@@ -51,6 +53,9 @@ parser.add_argument('--model-dir', help='use this directory as model root')
 parser.add_argument('--batch-size', type=int, help='number of lines in a batch')
 parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False, help='disable automatic fixing of edit op sequences')
 
+parser.add_argument('--temperature', type=float, help='temperature of the output softmax')
+parser.add_argument('--attn-temperature', type=float, help='temperature of the attention softmax')
+
 parser.add_argument('--align-encoder-id', type=int, default=0, help='id of the encoder whose attention outputs we are interested in (only useful in the multi-encoder setting)')
 
 def main(args=None):
@@ -75,7 +80,8 @@ def main(args=None):
         for k, v in default_config.items():
             config.setdefault(k, v)
 
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # disable TensorFlow's debugging logs
+    if not config.debug:
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # disable TensorFlow's debugging logs
     decoding_mode = any(arg is not None for arg in (args.decode, args.eval, args.align))
 
     # enforce parameter constraints

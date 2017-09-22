@@ -214,8 +214,7 @@ class TranslationModel:
                 for ext, vocab, sentence in zip(self.extensions, self.vocabs, lines)
             ]
 
-            _, weights = self.seq2seq_model.step(data=[token_ids], forward_only=True, align=True,
-                                                 update_model=False)
+            _, weights = self.seq2seq_model.step(data=[token_ids], align=True, update_model=False)
 
             trg_vocab = self.trg_vocab[0]
             trg_token_ids = token_ids[len(self.src_ext)]
