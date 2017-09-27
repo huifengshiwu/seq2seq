@@ -228,9 +228,20 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                                              padding='VALID', strides=[stride])
                 encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / stride))
 
+            if encoder.highway_layers:
+                x = encoder_inputs_
+                for j in range(encoder.highway_layers):
+                    size = x.shape[2].value
+
+                    with tf.variable_scope('highway_{}'.format(j + 1)):
+                        g = tf.layers.dense(x, size, activation=tf.nn.sigmoid, use_bias=True, name='g')
+                        y = tf.layers.dense(x, size, activation=tf.nn.relu, use_bias=True, name='y')
+                        x = g * y + (1 - g) * x
+
+                encoder_inputs_ = x
+
             # Contrary to Theano's RNN implementation, states after the sequence length are zero
             # (while Theano repeats last state)
-
             parameters = dict(
                 inputs=encoder_inputs_, sequence_length=encoder_input_length_,
                 dtype=tf.float32, parallel_iterations=encoder.parallel_iterations,

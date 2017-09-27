@@ -88,6 +88,7 @@ attn_filter_length: 0
 input_layers: null       # list of fully connected layer sizes, applied before the encoder
 attn_temperature: 1.0    # 1.0: true softmax (low values: uniform distribution, high values: argmax)
 final_state: last        # last (default), concat_last, average
+highway_layers: 0        # number of highway layers before the encoder (after convolutions and maxout)
 
 # decoder settings
 tie_embeddings: False     # use transpose of the embedding matrix for output projection (requires 'output_extra_proj')
