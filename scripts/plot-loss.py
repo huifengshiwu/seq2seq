@@ -36,6 +36,8 @@ parser.add_argument('--print-best', action='store_true')
 parser.add_argument('--print-diff', action='store_true')
 parser.add_argument('--auto', action='store_true')
 
+parser.add_argument('--legend-loc', default='best')
+
 args = parser.parse_args()
 
 if args.auto:
@@ -279,12 +281,17 @@ else:
 
     colors = [line.get_color() for line in ax_left.get_lines()]
 
-    lines = [plt.plot([], [], c=color)[0] for color in colors]
+    if len(args.log_files) == 1:
+        labels = []
+        lines = []
+    else:
+        lines = [plt.plot([], [], c=color)[0] for color in colors]
+
     lines += [plt.plot([], [], c='black', linestyle=linestyle)[0] for linestyle in linestyles[:len(args.plot)]]
     labels += [metric_labels[name] for name in data]
 
     fig.tight_layout()
-    plt.legend(lines, labels, loc='best', framealpha=0.3)
+    plt.legend(lines, labels, loc=args.legend_loc, framealpha=0.3)
 
     if args.output is not None:
         plt.savefig(args.output)

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-data_dir=data/books
+data_dir=data/books_plus
 raw_data=raw_data/books
 mkdir -p ${data_dir}
 
-cat ${raw_data}/train.fr | perl -pe 's/^(-+)([^\s-])/$1 $2/g' > ${data_dir}/train.raw.fr
-cp ${raw_data}/train.en ${data_dir}/train.raw.en
+cat ${raw_data}/{train,other}.fr | perl -pe 's/^(-+)([^\s-])/$1 $2/g' > ${data_dir}/train.raw.fr
+cat ${raw_data}/{train,other}.en > ${data_dir}/train.raw.en
 
 scripts/prepare-data.py ${data_dir}/train.raw fr en ${data_dir} --lowercase --no-tokenize en \
 --dev-corpus ${raw_data}/dev --test-corpus ${raw_data}/test --normalize-punk fr --shuffle --seed 1234 \
