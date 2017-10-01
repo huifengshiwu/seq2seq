@@ -104,6 +104,13 @@ def score_function_decorator(reversed=False):
     return decorator
 
 
+def divide(x, y):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        z = np.true_divide(x, y)
+        z[~ np.isfinite(z)] = 0
+    return z
+
+
 def corpus_bleu(hypotheses, references, smoothing=False, order=4, **kwargs):
     """
     Computes the BLEU score at the corpus-level between a list of translation hypotheses and references.
@@ -142,7 +149,7 @@ def corpus_bleu(hypotheses, references, smoothing=False, order=4, **kwargs):
         total += 1
         correct += 1
 
-    scores = correct / total
+    scores = divide(correct, total)
 
     score = math.exp(
         sum(math.log(score) if score > 0 else float('-inf') for score in scores) / order
@@ -176,7 +183,7 @@ def corpus_ter(hypotheses, references, case_sensitive=True, **kwargs):
 @score_function_decorator(reversed=True)
 def corpus_wer(hypotheses, references, **kwargs):
     scores = [
-        levenhstein(tuple(hyp.split()), tuple(ref.split())) / len(ref.split())
+        levenshtein(tuple(hyp.split()), tuple(ref.split()))[0] / len(ref.split())
         for hyp, ref in zip(hypotheses, references)
     ]
 
@@ -193,8 +200,9 @@ def corpus_scores(hypotheses, references, main='bleu', **kwargs):
     # ter, _ = corpus_ter(hypotheses, references)
     ter, _ = corpus_ter(hypotheses, references)
     wer, _ = corpus_wer(hypotheses, references)
+    bleu1, _ = corpus_bleu(hypotheses, references, order=1)
 
-    scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer)])
+    scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer), ('bleu1', bleu1)])
     main_score = scores[main]
     summary = ' '.join(['{}={:.2f}'.format(k, v) for k, v in scores.items() if k != main] + [summary])
 
@@ -215,7 +223,7 @@ corpus_scores_bleu = corpus_scores
 
 
 @functools.lru_cache(maxsize=1024)
-def levenhstein(src, trg):
+def levenshtein_rec(src, trg):
     # Dynamic programming by memoization
     if len(src) == 0:
         return len(trg)
@@ -223,9 +231,9 @@ def levenhstein(src, trg):
         return len(src)
 
     return min(
-        int(src[0] != trg[0]) + levenhstein(src[1:], trg[1:]),
-        1 + levenhstein(src[1:], trg),
-        1 + levenhstein(src, trg[1:])
+        int(src[0] != trg[0]) + levenshtein_rec(src[1:], trg[1:]),
+        1 + levenshtein_rec(src[1:], trg),
+        1 + levenshtein_rec(src, trg[1:])
     )
 
 

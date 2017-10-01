@@ -1,34 +1,39 @@
 label: 'debug'
-description: "small BTEC config"
-
-cell_size: 128
-attn_size: 128
-embedding_size: 64
-
-layers: 1
-bidir: True
-use_lstm: True
-weight_scale: 0.1
+description: ''
 
 data_dir: data/BTEC
 model_dir: models/BTEC/debug
-batch_size: 16
-dev_prefix: dev
+
 
 optimizer: adam
 learning_rate: 0.001
-
-steps_per_checkpoint: 200
-steps_per_eval: 200
-score_function: corpus_scores
-
-max_gradient_norm: 1.0
+batch_size: 64
 batch_mode: standard
 read_ahead: 10
-max_len: 25
+max_gradient_norm: 5.0
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 30000
+
+cell_size: 256
+attn_size: 256
+embedding_size: 128
+cell_type: LSTM
 
 encoders:
   - name: fr
+    bidir: True
+    final_state: average
+    max_len: 25
 
 decoders:
   - name: en
+    layers: 2
+    max_len: 25
+
+use_dropout: True
+rnn_input_dropout: 0.5
+initial_state_dropout: 0.5
+input_layer_dropout: 0.5
+reverse_input: True
