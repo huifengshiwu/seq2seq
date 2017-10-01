@@ -35,7 +35,6 @@ encoders:
     bidir_projection: True
     final_state: concat_last
     train_initial_states: False
-    embedding_initializer: sqrt3   # sqrt3 or default
     bidir: True
 
 decoders:
@@ -56,3 +55,4 @@ rnn_input_dropout: 0.5
 initial_state_dropout: 0.5
 input_layer_dropout: 0.5
 reverse_input: True
+use_lstm_full_state: True

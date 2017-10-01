@@ -52,6 +52,7 @@ parser.add_argument('--pred-edits', action='store_const', const=True, help='pred
 parser.add_argument('--model-dir', help='use this directory as model root')
 parser.add_argument('--batch-size', type=int, help='number of lines in a batch')
 parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False, help='disable automatic fixing of edit op sequences')
+parser.add_argument('--max-output-len', type=int, help='maximum length of the output sequence (control decoding speed)')
 
 parser.add_argument('--temperature', type=float, help='temperature of the output softmax')
 parser.add_argument('--attn-temperature', type=float, help='temperature of the attention softmax')
@@ -161,6 +162,9 @@ def main(args=None):
         for encoder_or_decoder in task.encoders + task.decoders:
             for parameter, value in task.items():
                 encoder_or_decoder.setdefault(parameter, value)
+
+        if args.max_output_len is not None:   # override decoder's max len
+            task.decoders[0].max_len = args.max_output_len
 
     device = None
     if config.no_gpu:

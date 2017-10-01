@@ -1,16 +1,17 @@
-label: 'Books baseline with joint subwords'
+label: 'Books baseline from subwords to characters'
+description: 'smaller model'
 
-cell_size: 512
-attn_size: 512
-embedding_size: 256
+cell_size: 256
+attn_size: 256
+embedding_size: 128
 
 bidir: True
 cell_type: LSTM
 weight_scale: 0.1
 
-data_dir: data/books
-model_dir: models/books/baseline
-batch_size: 32
+data_dir: data/audiobooks
+model_dir: models/audiobooks/MT/sub2char.1
+batch_size: 64
 
 train_prefix: train
 dev_prefix: [dev]
@@ -29,16 +30,21 @@ read_ahead: 10
 max_steps: 100000
 
 encoders:
-  - name: jsub.en
+  - name: sub.en
     final_state: average
-    max_len: 62
+    bidir_projection: False
+    train_initial_states: True
+    max_len: 60
 
 decoders:
-  - name: jsub.fr
+  - name: char.fr
     conditional_rnn: True
     pred_deep_layer: True
-    deep_layer_size: 512
-    max_len: 62
+    character_level: True
+    use_previous_word: True
+    deep_layer_size: 256
+    embedding_size: 128
+    max_len: 400
 
 use_dropout: True
 pervasive_dropout: True

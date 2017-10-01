@@ -76,6 +76,7 @@ def rnn_beam_search(update_funs, initial_states, sequence_length, beam_width, le
     :param early_stopping: same behavior as the old beam-search implementation, beam size is reduced by one
         each time a new finished hypothesis is encountered. This doesn't improve decoding speed, but
         might produce better results.
+        FIXME: this takes a lot of memory. This causes crashes with very long sequences
     :return: tensor of size (batch_size, beam_size, seq_len) containing the beam-search hypotheses sorted by
         best score (axis 1), and tensor of size (batch_size, beam_size) containing the said scores.
     """

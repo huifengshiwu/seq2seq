@@ -135,7 +135,12 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.use_dropout:
                 size = tf.shape(encoder_inputs_)[2]
-                noise_shape = [1, 1, size] if encoder.pervasive_dropout else [batch_size, time_steps, size]
+
+                if encoder.keep_pervasive_dropout_bug:
+                    noise_shape = [1, time_steps, 1] if encoder.pervasive_dropout else [batch_size, time_steps, 1]
+                else:
+                    noise_shape = [1, 1, size] if encoder.pervasive_dropout else [batch_size, time_steps, size]
+
                 encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.word_keep_prob,
                                                 noise_shape=noise_shape)
 
