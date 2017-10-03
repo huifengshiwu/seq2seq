@@ -339,7 +339,7 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
         iterator = cycling_batch_iterator(data, batch_size, shuffle=shuffle, allow_smaller=allow_smaller)
 
     if read_ahead is None or read_ahead <= 1:
-        return iterator
+        yield from iterator
 
     while True:
         batches = []

@@ -40,3 +40,12 @@ scripts/prepare-data.py ${data_dir}/train fr en ${data_dir} --mode vocab --chara
 scripts/speech/audio-features-shuf.py ${data_dir}/train.feats41 ${data_dir}/train.shuf.feats41 \
 --input-txt ${data_dir}/train.{fr,en} ${data_dir}/train.sub.{fr,en} ${data_dir}/train.jsub.{fr,en} \
 --output-txt ${data_dir}/train.shuf.{fr,en} ${data_dir}/train.shuf.sub.{fr,en} ${data_dir}/train.shuf.jsub.{fr,en}
+
+cp ${data_dir}/train.en ${data_dir}/train.char.en
+cp ${data_dir}/train.fr ${data_dir}/train.char.fr
+cp ${data_dir}/dev.en ${data_dir}/dev.char.en
+cp ${data_dir}/dev.fr ${data_dir}/dev.char.fr
+cp ${data_dir}/test.en ${data_dir}/test.char.en
+cp ${data_dir}/test.fr ${data_dir}/test.char.fr
+cp ${data_dir}/train.en ${data_dir}/train.shuf.char.en
+cp ${data_dir}/train.fr ${data_dir}/train.shuf.char.fr

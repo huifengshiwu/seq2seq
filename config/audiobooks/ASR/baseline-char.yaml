@@ -30,6 +30,7 @@ max_steps: 100000
 
 encoders:
   - name: feats41
+    embedding_size: 41
     final_state: concat_last
     bidir_projection: True
     train_initial_states: False
