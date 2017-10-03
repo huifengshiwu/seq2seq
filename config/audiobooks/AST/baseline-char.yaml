@@ -12,9 +12,10 @@ data_dir: data/audiobooks
 model_dir: models/audiobooks/AST/baseline_char
 batch_size: 64
 
-train_prefix: train
+train_prefix: train.shuf
 dev_prefix: [dev]
 vocab_prefix: vocab
+max_train_size: 10000
 
 optimizer: adam
 learning_rate: 0.001
