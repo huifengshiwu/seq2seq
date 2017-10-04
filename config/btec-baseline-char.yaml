@@ -37,7 +37,6 @@ decoders:
     layers: 1
     max_len: 120
     embedding_size: 64
-    bidir: True
     character_level: True
     conditional_rnn: True
     pred_maxout_layer: False
