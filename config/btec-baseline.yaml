@@ -48,4 +48,3 @@ rnn_output_dropout: 0.2
 attn_dropout: 0.2
 word_dropout: 0.2
 initial_state_dropout: 0.2
-use_lstm_full_state: False

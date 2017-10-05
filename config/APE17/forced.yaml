@@ -45,3 +45,4 @@ ref_ext: pe
 use_dropout: True
 rnn_input_dropout: 0.5
 initial_state_dropout: 0.5
+use_lstm_full_state: True

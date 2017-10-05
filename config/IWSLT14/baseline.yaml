@@ -45,3 +45,4 @@ rnn_state_dropout: 0.0
 attn_dropout: 0.2
 word_dropout: 0.2
 layer_norm: False
+use_lstm_full_state: True
