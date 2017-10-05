@@ -47,5 +47,22 @@ cp ${data_dir}/dev.en ${data_dir}/dev.char.en
 cp ${data_dir}/dev.fr ${data_dir}/dev.char.fr
 cp ${data_dir}/test.en ${data_dir}/test.char.en
 cp ${data_dir}/test.fr ${data_dir}/test.char.fr
-cp ${data_dir}/train.en ${data_dir}/train.shuf.char.en
-cp ${data_dir}/train.fr ${data_dir}/train.shuf.char.fr
+
+cp ${data_dir}/train.shuf.en ${data_dir}/train.shuf.char.en
+cp ${data_dir}/train.shuf.fr ${data_dir}/train.shuf.char.fr
+
+# File stats (min length to cover 90%, 95%, 98% or 99% of the corpus)
+
+# train.feats41:
+# 90%: 1488, 95%: 1867, 98%: 2385, 99%: 2880
+# train.char.en:
+# 90%:  222, 95%:  278, 98%:  354, 99%:  420
+# train.char.fr:
+# 90%:  286, 95%:  359, 98%:  464, 99%:  558
+
+# dev.feats41:
+# 90%: 1249, 95%: 1516, 98%: 1759, 99%: 1855
+# dev.char.en:
+# 90%:  201, 95%:  245, 98%:  316, 99%:  523
+# dev.char.fr:
+# 90%:  212, 95%:  277, 98%:  367, 99%:  445
