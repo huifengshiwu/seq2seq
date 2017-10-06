@@ -74,3 +74,14 @@ scripts/speech/audio-features-shuf.py ${data_dir}/train.{concat,concat.shuf}.fea
 scripts/prepare-data.py ${data_dir}/train.concat.shuf fr en ${data_dir} --mode vocab --character-level --no-tokenize --vocab-prefix vocab.char
 cp ${data_dir}/vocab.fr ${data_dir}/vocab.w2c.fr
 cp ${data_dir}/vocab.char.en ${data_dir}/vocab.w2c.en
+
+
+for corpus in dev test1 test2 train train.concat train.concat.shuf
+do
+    cat ${data_dir}/${corpus}.fr | tr -d "[,\!.\?:;\"]" | tr -s " " > ${data_dir}/${corpus}.nopunk.fr
+done
+
+scripts/prepare-data.py ${data_dir}/train.concat.shuf.nopunk fr ${data_dir} --mode vocab --character-level --no-tokenize --vocab-prefix vocab.nopunk.char
+scripts/prepare-data.py ${data_dir}/train.concat.shuf.nopunk fr ${data_dir} --mode vocab --no-tokenize --vocab-prefix vocab.nopunk
+cp ${data_dir}/vocab.nopunk.fr ${data_dir}/vocab.nopunk.w2c.fr
+cp ${data_dir}/vocab.nopunk.char.en ${data_dir}/vocab.nopunk.w2c.en
