@@ -1,11 +1,11 @@
 label: 'BTEC baseline'
 description: "multi-speaker character-level baseline on BTEC"
 
-data_dir: data/BTEC_speech
-model_dir: models/BTEC_speech/baseline_char
+data_dir: data/BTEC
+model_dir: models/BTEC/ASR/baseline_char
 train_prefix: train.concat.shuf
 max_train_size: 40000
-vocab_prefix: vocab.w2c
+vocab_prefix: vocab.char
 
 optimizer: adam
 learning_rate: 0.001
@@ -17,6 +17,7 @@ max_gradient_norm: 5.0
 steps_per_checkpoint: 1000
 steps_per_eval: 1000
 max_steps: 60000
+score_function: corpus_scores_wer
 
 cell_size: 256
 attn_size: 256
@@ -30,11 +31,6 @@ encoders:
     conv_size: [3, 3]
     conv_strides: [2, 2]
     conv_activation: relu
-    # time_pooling: [2, 2]
-    # pooling_avg: True
-    # conv_lstm_size: [1, 3]
-    # inter_layers: [512, 512, 512]
-    # inter_layer_activation: relu
     binary: True
     max_len: 600
     input_layers: [256, 128]
@@ -45,10 +41,10 @@ encoders:
     bidir: True
 
 decoders:
-  - name: en
+  - name: fr
     layers: 2
     embedding_size: 64
-    max_len: 120
+    max_len: 140
     pred_maxout_layer: False
     rnn_feed_attn: True
     use_previous_word: False

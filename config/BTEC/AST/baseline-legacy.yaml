@@ -1,8 +1,8 @@
 label: 'BTEC baseline'
 description: "multi-speaker baseline on BTEC, same configuration as Berard et al. 2016"
 
-data_dir: data/BTEC_speech
-model_dir: models/BTEC_speech/baseline
+data_dir: data/BTEC
+model_dir: models/BTEC/AST/baseline
 train_prefix: train.concat.shuf  # Michel, Philippe, Loic, Marion, Helene, Fabienne
 max_train_size: 20000
 

@@ -5,22 +5,16 @@ cell_size: 256
 attn_size: 256
 embedding_size: 128
 
-bidir: True
-cell_type: GRU  # GRU/LSTM
+cell_type: LSTM
 weight_scale: 0.1
 
 data_dir: data/BTEC
-model_dir: models/BTEC/baseline
+model_dir: models/BTEC/MT/baseline_char
 batch_size: 32
+vocab_prefix: vocab.w2c
 
 optimizer: adam
 learning_rate: 0.001
-
-sgd_after_n_epoch: 20
-sgd_learning_rate: 0.2
-learning_rate_decay_factor: 0.9
-decay_every_n_epoch: 1
-decay_after_n_epoch: 21
 
 steps_per_checkpoint: 2000
 steps_per_eval: 2000
@@ -30,16 +24,26 @@ max_gradient_norm: 1.0
 batch_mode: standard
 read_ahead: 10
 max_len: 25
-max_steps: 30000
+max_steps: 100000
 
 encoders:
   - name: fr
+    bidir_projection: True
+    train_initial_states: False
     final_state: average
 
 decoders:
   - name: en
+    layers: 1
+    max_len: 120
+    embedding_size: 64
+    character_level: True
     conditional_rnn: True
+    pred_maxout_layer: False
     pred_deep_layer: True
+    pred_deep_layer_size: 128
+    use_previous_word: False
+    pred_embed_proj: False
 
 use_dropout: True
 pervasive_dropout: True
@@ -48,3 +52,4 @@ rnn_output_dropout: 0.2
 attn_dropout: 0.2
 word_dropout: 0.2
 initial_state_dropout: 0.2
+deep_layer_dropout: 0.2

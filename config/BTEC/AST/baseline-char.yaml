@@ -1,0 +1,63 @@
+label: 'BTEC baseline'
+description: "multi-speaker character-level baseline on BTEC"
+
+data_dir: data/BTEC
+model_dir: models/BTEC/AST/baseline_char
+train_prefix: train.concat.shuf
+max_train_size: 40000
+vocab_prefix: vocab.char
+
+optimizer: adam
+learning_rate: 0.001
+batch_size: 64
+batch_mode: standard
+read_ahead: 10
+max_gradient_norm: 5.0
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 60000
+
+cell_size: 256
+attn_size: 256
+cell_type: LSTM
+
+encoders:
+  - name: feats41
+    embedding_size: 41
+    layers: 3
+    conv_filters: [16, 16]
+    conv_size: [3, 3]
+    conv_strides: [2, 2]
+    conv_activation: relu
+    # time_pooling: [2, 2]
+    # pooling_avg: True
+    # conv_lstm_size: [1, 3]
+    # inter_layers: [512, 512, 512]
+    # inter_layer_activation: relu
+    binary: True
+    max_len: 600
+    input_layers: [256, 128]
+    input_layer_activation: tanh
+    bidir_projection: True
+    final_state: concat_last
+    train_initial_states: False
+    bidir: True
+
+decoders:
+  - name: en
+    layers: 2
+    embedding_size: 64
+    max_len: 120
+    pred_maxout_layer: False
+    rnn_feed_attn: True
+    use_previous_word: False
+    pred_embed_proj: False
+    character_level: True
+
+use_dropout: True
+pervasive_dropout: True
+attn_dropout: 0.4
+rnn_input_dropout: 0.4
+initial_state_dropout: 0.4
+input_layer_dropout: 0.4
