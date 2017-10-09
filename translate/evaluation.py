@@ -125,8 +125,8 @@ def corpus_bleu(hypotheses, references, smoothing=False, order=4, **kwargs):
     :param kwargs: additional (unused) parameters
     :return: score (float), and summary containing additional information (str)
     """
-    total = np.zeros((4,))
-    correct = np.zeros((4,))
+    total = np.zeros((order,))
+    correct = np.zeros((order,))
 
     hyp_length = 0
     ref_length = 0
@@ -181,9 +181,12 @@ def corpus_ter(hypotheses, references, case_sensitive=True, **kwargs):
 
 
 @score_function_decorator(reversed=True)
-def corpus_wer(hypotheses, references, **kwargs):
+def corpus_wer(hypotheses, references, char_based=False, **kwargs):
+    def split(s):
+        return tuple(s) if char_based else tuple(s.split())
+
     scores = [
-        levenshtein(tuple(hyp.split()), tuple(ref.split()))[0] / len(ref.split())
+        levenshtein(split(hyp), split(ref))[0] / len(split(ref))
         for hyp, ref in zip(hypotheses, references)
     ]
 
@@ -198,11 +201,16 @@ def corpus_wer(hypotheses, references, **kwargs):
 def corpus_scores(hypotheses, references, main='bleu', **kwargs):
     bleu_score, summary = corpus_bleu(hypotheses, references)
     # ter, _ = corpus_ter(hypotheses, references)
-    ter, _ = corpus_ter(hypotheses, references)
+    try:
+        ter, _ = corpus_ter(hypotheses, references)
+    except:  # Java not installed
+        ter = 0.0
+
     wer, _ = corpus_wer(hypotheses, references)
+    cer, _ = corpus_wer(hypotheses, references, char_based=True)
     bleu1, _ = corpus_bleu(hypotheses, references, order=1)
 
-    scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer), ('bleu1', bleu1)])
+    scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer), ('bleu1', bleu1), ('cer', cer)])
     main_score = scores[main]
     summary = ' '.join(['{}={:.2f}'.format(k, v) for k, v in scores.items() if k != main] + [summary])
 
