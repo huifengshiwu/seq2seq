@@ -204,16 +204,16 @@ def main(args=None):
             model = TranslationModel(**config)
 
     # count parameters
-    utils.log('model parameters ({})'.format(len(tf.global_variables())))
+    # not counting parameters created by training algorithm (e.g. Adam)
+    variables = [var for var in tf.global_variables() if not var.name.startswith('gradients')]
+    utils.log('model parameters ({})'.format(len(variables)))
     parameter_count = 0
-    for var in tf.global_variables():
+    for var in variables:
         utils.log('  {} {}'.format(var.name, var.get_shape()))
-
-        if not var.name.startswith('gradients'):  # not counting parameters created by training algorithm (e.g. Adam)
-            v = 1
-            for d in var.get_shape():
-                v *= d.value
-            parameter_count += v
+        v = 1
+        for d in var.get_shape():
+            v *= d.value
+        parameter_count += v
     utils.log('number of parameters: {:.2f}M'.format(parameter_count / 1e6))
 
     tf_config = tf.ConfigProto(log_device_placement=False, allow_soft_placement=True)

@@ -28,8 +28,11 @@ parser.add_argument('--best', action='store_true')
 parser.add_argument('--plot', nargs='+', default=[])
 parser.add_argument('--bleu', action='store_true')
 parser.add_argument('--ter', action='store_true')
-parser.add_argument('--dev-loss', action='store_true')
-parser.add_argument('--train-loss', action='store_true')
+parser.add_argument('--wer', action='store_true')
+parser.add_argument('--cer', action='store_true')
+parser.add_argument('--bleu1', action='store_true')
+parser.add_argument('--dev', action='store_true')
+parser.add_argument('--train', action='store_true')
 
 parser.add_argument('--print-latest', action='store_true')
 parser.add_argument('--print-best', action='store_true')
@@ -37,6 +40,11 @@ parser.add_argument('--print-diff', action='store_true')
 parser.add_argument('--auto', action='store_true')
 
 parser.add_argument('--legend-loc', default='best')
+
+parser.add_argument('--task-name')
+parser.add_argument('--eval-name')
+
+parser.add_argument('--step-delta', type=int, nargs='*')
 
 args = parser.parse_args()
 
@@ -47,15 +55,23 @@ if args.auto:
 args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                   for log_file in args.log_files]
 
+# TODO: remove --plot argument
+# TODO: factorize code
 args.plot = [x.lower() for x in args.plot]
 
 if args.bleu and 'bleu' not in args.plot:
     args.plot.append('bleu')
 if args.ter and 'ter' not in args.plot:
     args.plot.append('ter')
-if args.dev_loss and 'dev' not in args.plot:
+if args.wer and 'wer' not in args.plot:
+    args.plot.append('wer')
+if args.bleu1 and 'bleu1' not in args.plot:
+    args.plot.append('bleu1')
+if args.cer and 'cer' not in args.plot:
+    args.plot.append('cer')
+if args.dev and 'dev' not in args.plot:
     args.plot.append('dev')
-if args.train_loss and 'train' not in args.plot:
+if args.train and 'train' not in args.plot:
     args.plot.append('train')
 
 if not args.plot:
@@ -64,8 +80,10 @@ if not args.plot:
 args.bleu = 'bleu' in args.plot
 args.ter = 'ter' in args.plot
 args.dev = 'dev' in args.plot
-args.dev_loss = 'dev' in args.plot
-args.train_loss = 'train' in args.plot
+args.train = 'train' in args.plot
+args.wer = 'wer' in args.plot
+args.cer = 'cer' in args.plot
+args.bleu1 = 'bleu1' in args.plot
 
 if not args.txt:
     try:
@@ -98,42 +116,85 @@ data = OrderedDict()
 for name in args.plot:
     data[name] = []
 
-for log_file in args.log_files:
+for file_id, log_file in enumerate(args.log_files):
+    if args.step_delta:
+        step_delta = args.step_delta[file_id]
+    else:
+        step_delta = 0
+
     current_step = 0
 
     dev_perplexities = []
     train_perplexities = []
     bleu_scores = []
     ter_scores = []
+    wer_scores = []
+    cer_scores = []
+    bleu1_scores = []
+    right_task = True
 
     with open(log_file) as f:
         for line in f:
-            m = re.search('step (\d+)', line)
-            if m:
-                current_step = int(m.group(1))
+            line = re.sub(r'^\d\d/\d\d \d\d:\d\d:\d\d\s+', '', line)  # strip date
 
-            m = re.search(r'eval: loss (-?\d+.\d+)', line)
-            if m and not any(step == current_step for step, _ in dev_perplexities):
-                perplexity = float(m.group(1))
-                dev_perplexities.append((current_step, perplexity))
+            if not args.task_name or line.startswith(args.task_name):
+                m = re.search('step (\d+)', line)
+                if m:
+                    current_step = int(m.group(1)) - step_delta
+
+            if right_task:
+                prefix = '^{} '.format(args.eval_name) if args.eval_name else ''
+                m = re.search(prefix + r'eval: loss (-?\d+.\d+)', line)
+
+                if m and not any(step == current_step for step, _ in dev_perplexities):
+                    perplexity = float(m.group(1))
+                    dev_perplexities.append((current_step, perplexity))
+                    continue
+
+            if args.task_name and not line.startswith(args.task_name):
+                right_task = False
                 continue
+            else:
+                right_task = True
 
             m = re.search(r'loss (-?\d+.\d+)$', line)
             if m and not any(step == current_step for step, _ in train_perplexities):
                 perplexity = float(m.group(1))
                 train_perplexities.append((current_step, perplexity))
+                continue
+
+            if args.eval_name and not re.search('(^|\s)' + args.eval_name + ' score=', line):
+                continue
 
             m = re.search(r'bleu=(\d+\.\d+)', line)
             m = m or re.search(r'score=(\d+\.\d+)', line)
             if m and not any(step == current_step for step, _ in bleu_scores):
-                bleu_score = float(m.group(1))
-                bleu_scores.append((current_step, bleu_score))
+                score = float(m.group(1))
+                bleu_scores.append((current_step, score))
 
             m = re.search(r'ter=(\d+\.\d+)', line)
             m = m or re.search(r'score=(\d+\.\d+)', line)
             if m and not any(step == current_step for step, _ in ter_scores):
-                ter_score = float(m.group(1))
-                ter_scores.append((current_step, ter_score))
+                score = float(m.group(1))
+                ter_scores.append((current_step, score))
+
+            m = re.search(r'wer=(\d+\.\d+)', line)
+            m = m or re.search(r'score=(\d+\.\d+)', line)
+            if m and not any(step == current_step for step, _ in wer_scores):
+                score = float(m.group(1))
+                wer_scores.append((current_step, score))
+
+            m = re.search(r'bleu1=(\d+\.\d+)', line)
+            m = m or re.search(r'score=(\d+\.\d+)', line)
+            if m and not any(step == current_step for step, _ in bleu1_scores):
+                score = float(m.group(1))
+                bleu1_scores.append((current_step, score))
+
+            m = re.search(r'cer=(\d+\.\d+)', line)
+            m = m or re.search(r'score=(\d+\.\d+)', line)
+            if m and not any(step == current_step for step, _ in cer_scores):
+                score = float(m.group(1))
+                cer_scores.append((current_step, score))
 
     if 'ter' in data:
         data['ter'].append(ter_scores)
@@ -143,12 +204,21 @@ for log_file in args.log_files:
         data['dev'].append(dev_perplexities)
     if 'train' in data:
         data['train'].append(train_perplexities)
+    if 'wer' in data:
+        data['wer'].append(wer_scores)
+    if 'bleu1' in data:
+        data['bleu1'].append(bleu1_scores)
+    if 'cer' in data:
+        data['cer'].append(cer_scores)
 
 metric_labels = {
     'bleu': 'BLEU',
     'ter': 'TER',
     'dev': 'Dev Loss',
-    'train': 'Train Loss'
+    'train': 'Train Loss',
+    'cer': 'CER',
+    'wer': 'WER',
+    'bleu1': 'BLEU1'
 }
 
 def boldify(text):
@@ -208,7 +278,7 @@ if args.txt:
         for model_label, values_ in zip(labels, values):
             values__ = []
 
-            get_best = max if name == 'bleu' else min
+            get_best = max if name == 'bleu' or name == 'bleu1' else min
             try:
                 _, latest_value = values_[-1]
             except IndexError:
@@ -253,7 +323,8 @@ if args.txt:
 else:
     linestyles = [':', '--', '-.']
 
-    assert not (args.ter and args.bleu) or not args.dev_loss and not args.train_loss
+    c = len(set(args.plot).intersection({'ter', 'bleu', 'wer', 'cer', 'bleu1'}))
+    assert c <= 1 or (c == 2 and not args.dev and not args.train)
 
     fig, ax_left = plt.subplots()
     ax_right = ax_left.twinx()

@@ -17,6 +17,8 @@ parser.add_argument('--params', action='store_true')
 parser.add_argument('--ter', action='store_true')
 parser.add_argument('--bleu', action='store_true')
 parser.add_argument('--wer', action='store_true')
+parser.add_argument('--cer', action='store_true')
+parser.add_argument('--bleu1', action='store_true')
 
 
 def print_scores(log_file, time=False, label=None):
@@ -57,7 +59,7 @@ def print_scores(log_file, time=False, label=None):
                 if not re.search(args.task_name, line):
                     continue
 
-            m = re.findall('(bleu|score|ter|wer|penalty|ratio)=(\d+.\d+)', line)
+            m = re.findall('(bleu|score|ter|wer|cer|bleu1|penalty|ratio)=(\d+.\d+)', line)
             if m:
                 scores_ = {k: float(v) for k, v in m}
                 scores.setdefault(current_step, scores_)
@@ -67,17 +69,17 @@ def print_scores(log_file, time=False, label=None):
             if score is None:
                 score = d.get('score')
 
-            if args.score in ('ter', 'wer'):
+            if args.score in ('ter', 'wer', 'cer'):
                 score = -score
             return score
 
         step, best = max(scores.items(), key=lambda p: key(p[1]))
 
         if 'score' in best:
-            missing_key = next(k for k in ['bleu', 'ter', 'wer'] if k not in best)
+            missing_key = next(k for k in ['bleu', 'ter', 'wer', 'cer', 'bleu1'] if k not in best)
             best[missing_key] = best.pop('score')
 
-        keys = [args.score, 'bleu', 'ter', 'wer', 'penalty', 'ratio']
+        keys = [args.score, 'bleu', 'ter', 'wer', 'cer', 'bleu1', 'penalty', 'ratio']
         best = sorted(best.items(), key=lambda p: keys.index(p[0]))
 
         def pretty_time(seconds):
@@ -122,6 +124,10 @@ if __name__ == '__main__':
         args.score = 'ter'
     elif args.wer:
         args.score = 'wer'
+    elif args.cer:
+        args.score = 'cer'
+    elif args.bleu1:
+        args.score = 'bleu1'
     elif args.bleu or args.score is None:
         args.score = 'bleu'
 

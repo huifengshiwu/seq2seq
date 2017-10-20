@@ -663,8 +663,11 @@ def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=No
 
     var_names_ = []
     for name in var_names:
+        name_ = name
         for key, value in reverse_mapping:
-            name = re.sub(key, value, name)
+            name_ = re.sub(key, value, name_)
+        if name_ in list(name_mapping.values()):
+            name = name_
         var_names_.append(name)
     vars_ = dict(zip(var_names_, vars_))
 

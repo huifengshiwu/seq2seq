@@ -162,7 +162,9 @@ def corpus_bleu(hypotheses, references, smoothing=False, order=4, **kwargs):
 
 
 @score_function_decorator(reversed=True)
-def corpus_ter(hypotheses, references, case_sensitive=True, **kwargs):
+def corpus_ter(hypotheses, references, case_sensitive=True, tercom_path=None, **kwargs):
+    tercom_path = tercom_path or 'scripts/tercom.jar'
+
     with tempfile.NamedTemporaryFile('w') as hypothesis_file, tempfile.NamedTemporaryFile('w') as reference_file:
         for i, (hypothesis, reference) in enumerate(zip(hypotheses, references)):
             hypothesis_file.write('{} ({})\n'.format(hypothesis, i))
@@ -170,7 +172,7 @@ def corpus_ter(hypotheses, references, case_sensitive=True, **kwargs):
         hypothesis_file.flush()
         reference_file.flush()
 
-        cmd = ['java', '-jar', 'scripts/tercom.jar', '-h', hypothesis_file.name, '-r', reference_file.name]
+        cmd = ['java', '-jar', tercom_path, '-h', hypothesis_file.name, '-r', reference_file.name]
         if case_sensitive:
             cmd.append('-s')
 
@@ -198,6 +200,16 @@ def corpus_wer(hypotheses, references, char_based=False, **kwargs):
     return score, 'ratio={:.3f}'.format(hyp_length / ref_length)
 
 
+@score_function_decorator(reversed=True)
+def corpus_cer(hypotheses, references, **kwargs):
+    return corpus_wer(hypotheses, references, char_based=True)
+
+
+@score_function_decorator(reversed=False)
+def corpus_bleu1(hypotheses, references, **kwargs):
+    return corpus_bleu(hypotheses, references, order=1)
+
+
 def corpus_scores(hypotheses, references, main='bleu', **kwargs):
     bleu_score, summary = corpus_bleu(hypotheses, references)
     # ter, _ = corpus_ter(hypotheses, references)
@@ -207,8 +219,8 @@ def corpus_scores(hypotheses, references, main='bleu', **kwargs):
         ter = 0.0
 
     wer, _ = corpus_wer(hypotheses, references)
-    cer, _ = corpus_wer(hypotheses, references, char_based=True)
-    bleu1, _ = corpus_bleu(hypotheses, references, order=1)
+    cer, _ = corpus_cer(hypotheses, references)
+    bleu1, _ = corpus_bleu1(hypotheses, references)
 
     scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer), ('bleu1', bleu1), ('cer', cer)])
     main_score = scores[main]

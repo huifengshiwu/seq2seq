@@ -134,8 +134,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 encoder_inputs_ = tf.concat([encoder_inputs_, other_inputs], axis=2)
 
             if encoder.use_dropout:
-                size = tf.shape(encoder_inputs_)[2]
-                noise_shape = [1, 1, size] if encoder.pervasive_dropout else [batch_size, time_steps, size]
+                noise_shape = [1, time_steps, 1] if encoder.pervasive_dropout else [batch_size, time_steps, 1]
                 encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.word_keep_prob,
                                                 noise_shape=noise_shape)
 
@@ -149,7 +148,9 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=activation, use_bias=True,
                                             name='layer_{}'.format(j))
                     if encoder.use_dropout:
-                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)
+                        noise_shape = [1, 1, tf.shape(encoder_inputs_)[2]] if encoder.pervasive_dropout else None
+                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob,
+                                                        noise_shape=noise_shape)
 
             if encoder.conv_filters:
                 encoder_inputs_ = tf.expand_dims(encoder_inputs_, axis=3)
@@ -300,7 +301,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             elif encoder.final_state == 'average':
                 mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_inputs_)[1], dtype=tf.float32)
                 mask = tf.expand_dims(mask, axis=2)
-                encoder_state_ = tf.reduce_sum(mask * encoder_inputs_, axis=1) / tf.reduce_sum(mask, axis=1)
+                encoder_state_ = tf.reduce_sum(mask * encoder_outputs_, axis=1) / tf.reduce_sum(mask, axis=1)
             elif encoder.bidir:   # last backward hidden state (FIXME apply mask)
                 encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]
             else:  # use hidden state
@@ -320,12 +321,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_dropout=False, layer_norm=False,
                    **kwargs):
     if attn_keep_prob is not None:
-        if pervasive_dropout:
-            state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=[1, tf.shape(state)[1]])
-            hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob, noise_shape=[1, 1, tf.shape(hidden)[2]])
-        else:
-            state = tf.nn.dropout(state, keep_prob=attn_keep_prob)
-            hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob)
+        state_noise_shape = [1, tf.shape(state)[1]] if pervasive_dropout else None
+        state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=state_noise_shape)
+        hidden_noise_shape = [1, 1, tf.shape(hidden)[2]] if pervasive_dropout else None
+        hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob, noise_shape=hidden_noise_shape)
 
     y = dense(state, attn_size, use_bias=not layer_norm, name='W_a')
     y = tf.expand_dims(y, axis=1)
@@ -691,7 +690,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
             if decoder.use_dropout:
                 size = tf.shape(output_)[1]
-                noise_shape = [1, size] if decoder.pervasive_dropout else [batch_size, size]
+                noise_shape = [1, size] if decoder.pervasive_dropout else None
                 output_ = tf.nn.dropout(output_, keep_prob=decoder.deep_layer_keep_prob, noise_shape=noise_shape)
         else:
             if decoder.pred_maxout_layer:
@@ -734,7 +733,9 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
 
     if decoder.use_dropout:
-        initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
+        noise_shape = [1, tf.shape(initial_state)[1]] if decoder.pervasive_dropout else None
+        initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob,
+                                      noise_shape=noise_shape)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
         if decoder.layer_norm:
