@@ -42,8 +42,8 @@ with open(args.filename) as f:
             if not args.count_whitespaces:
                 chars = line.strip().replace(' ', '')
 
-            char_counts[len(line)] += 1
-            for char in line:
+            char_counts[len(chars)] += 1
+            for char in chars:
                 char_dict[char] += 1
 
         lines += 1

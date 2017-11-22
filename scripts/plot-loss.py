@@ -18,7 +18,7 @@ parser.add_argument('--labels', nargs='+')
 parser.add_argument('--no-x', action='store_true', help='Run with no X server')
 
 parser.add_argument('--txt', '--text', action='store_true')
-parser.add_argument('--stride', type=int)
+parser.add_argument('--stride', type=int, nargs='*')
 parser.add_argument('-n', type=int, default=15, dest='max_values')
 parser.add_argument('--intersection', action='store_true')
 
@@ -40,17 +40,22 @@ parser.add_argument('--print-diff', action='store_true')
 parser.add_argument('--auto', action='store_true')
 
 parser.add_argument('--legend-loc', default='best')
+parser.add_argument('--center-legend', action='store_true')
 
 parser.add_argument('--task-name')
 parser.add_argument('--eval-name')
 
 parser.add_argument('--step-delta', type=int, nargs='*')
+parser.add_argument('--step-multiplier', type=float, nargs='*')
 
 args = parser.parse_args()
 
 if args.auto:
     args.txt = True
     args.best = True
+
+if args.center_legend:
+    args.legend_loc = 'center right'
 
 args.log_files = [os.path.join(log_file, 'log.txt') if os.path.isdir(log_file) else log_file
                   for log_file in args.log_files]
@@ -116,12 +121,19 @@ data = OrderedDict()
 for name in args.plot:
     data[name] = []
 
-for file_id, log_file in enumerate(args.log_files):
-    if args.step_delta:
-        step_delta = args.step_delta[file_id]
-    else:
-        step_delta = 0
+if not args.step_delta:
+    args.step_delta = [0] * len(args.log_files)
+elif len(args.step_delta) == 1:
+    args.step_delta = [args.step_delta[0]] * len(args.log_files)
+else:
+    assert len(args.step_delta) == len(args.log_files)
 
+if not args.step_multiplier:
+    args.step_multiplier = [1] * len(args.log_files)
+else:
+    assert len(args.step_multiplier) == len(args.log_files)
+
+for step_multiplier, step_delta, log_file in zip(args.step_multiplier, args.step_delta, args.log_files):
     current_step = 0
 
     dev_perplexities = []
@@ -140,7 +152,7 @@ for file_id, log_file in enumerate(args.log_files):
             if not args.task_name or line.startswith(args.task_name):
                 m = re.search('step (\d+)', line)
                 if m:
-                    current_step = int(m.group(1)) - step_delta
+                    current_step = int((int(m.group(1)) - step_delta) / step_multiplier)
 
             if right_task:
                 prefix = '^{} '.format(args.eval_name) if args.eval_name else ''
@@ -255,6 +267,9 @@ if args.txt:
         steps = [step for step in steps if step >= args.min_steps]
         steps = [step for step in steps if args.max_steps == 0 or step <= args.max_steps]
 
+        if args.stride:  # FIXME
+            args.stride = args.stride[0]
+
         if args.auto:
             args.stride = int(math.ceil(len(steps) / cols))
             args.max_values = cols
@@ -321,15 +336,48 @@ if args.txt:
 
             print(fmt.format(model_label), ''.join(s))
 else:
+    if not args.stride:
+        args.stride = [1] * len(args.log_files)
+    elif len(args.stride) == 1:
+        args.stride = [args.stride[0]] * len(args.log_files)
+    else:
+        assert len(args.stride) == len(args.log_files)
+
+    data_ = dict()
+    for key, values in data.items():
+        values_ = []
+        for stride, value in zip(args.stride, values):
+            if args.avg or args.best:
+                value_ = []
+
+                if args.avg:
+                    fun = lambda l: (l[-1][0], sum(x[1] for x in l) / len(l))
+                else:
+                    fun = lambda l: (l[-1][0], max(x[1] for x in l))
+
+                for i in range(len(value) // stride):
+                    value_.append(fun(value[i * stride:(i + 1) * stride]))
+            else:
+                value_ = value[::stride]
+
+            values_.append(value_)
+        data_[key] = values_
+    data = data_
+
     linestyles = [':', '--', '-.']
 
     c = len(set(args.plot).intersection({'ter', 'bleu', 'wer', 'cer', 'bleu1'}))
     assert c <= 1 or (c == 2 and not args.dev and not args.train)
 
     fig, ax_left = plt.subplots()
-    ax_right = ax_left.twinx()
+
+    if len(args.plot) > 1:
+        ax_right = ax_left.twinx()
+    else:
+        ax_right = ax_left
 
     axes = [ax_left, ax_right, ax_right]
+
     axes = axes[:len(args.plot)]
     ax_left.set_xlabel('steps')
 

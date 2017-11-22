@@ -26,11 +26,14 @@ parser.add_argument('--reset-learning-rate', action='store_const', const=True, h
 parser.add_argument('--learning-rate', type=float, help='custom learning rate (triggers `reset-learning-rate`)')
 parser.add_argument('--purge', action='store_true', help='remove previous model files')
 
+parser.add_argument('--crash-test', action='store_const', const=True, help='build dummy batch with the longest sentences to test the memory usage')
+
 # Available actions (exclusive)
 parser.add_argument('--decode', nargs='*', help='translate this corpus (corpus name or list of files for each encoder)')
 parser.add_argument('--align', nargs='*', help='translate and show alignments by the attention mechanism')
 parser.add_argument('--eval', nargs='*', help='compute BLEU score on this corpus (corpus name or source files and target file)')
 parser.add_argument('--train', action='store_true', help='train an NMT model')
+parser.add_argument('--save', action='store_true')
 
 # TensorFlow configuration
 parser.add_argument('--gpu-id', type=int, help='index of the GPU where to run the computation')
@@ -81,6 +84,9 @@ def main(args=None):
         for k, v in default_config.items():
             config.setdefault(k, v)
 
+    if args.crash_test:
+        config.max_train_size = 0
+
     if not config.debug:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # disable TensorFlow's debugging logs
     decoding_mode = any(arg is not None for arg in (args.decode, args.eval, args.align))
@@ -88,7 +94,7 @@ def main(args=None):
     # enforce parameter constraints
     assert config.steps_per_eval % config.steps_per_checkpoint == 0, (
         'steps-per-eval should be a multiple of steps-per-checkpoint')
-    assert decoding_mode or args.train, (
+    assert decoding_mode or args.train or args.save, (
         'you need to specify at least one action (decode, eval, align, or train)')
     assert not (args.average and args.ensemble)
 
@@ -208,7 +214,7 @@ def main(args=None):
     variables = [var for var in tf.global_variables() if not var.name.startswith('gradients')]
     utils.log('model parameters ({})'.format(len(variables)))
     parameter_count = 0
-    for var in variables:
+    for var in sorted(variables, key=lambda var: var.name):
         utils.log('  {} {}'.format(var.name, var.get_shape()))
         v = 1
         for d in var.get_shape():
@@ -228,24 +234,27 @@ def main(args=None):
     with tf.Session(config=tf_config) as sess:
         best_checkpoint = os.path.join(config.checkpoint_dir, 'best')
 
+        params = {'variable_mapping': config.variable_mapping, 'reverse_mapping': config.reverse_mapping}
         if config.ensemble and len(config.checkpoints) > 1:
-            model.initialize(config.checkpoints)
+            model.initialize(config.checkpoints, **params)
         elif config.average and len(config.checkpoints) > 1:
             model.initialize(reset=True)
             sessions = [tf.Session(config=tf_config) for _ in config.checkpoints]
             for sess_, checkpoint in zip(sessions, config.checkpoints):
-                model.initialize(sess=sess_, checkpoints=[checkpoint])
+                model.initialize(sess=sess_, checkpoints=[checkpoint], **params)
             average_checkpoints(sess, sessions)
         elif (not config.checkpoints and decoding_mode and
              (os.path.isfile(best_checkpoint + '.index') or os.path.isfile(best_checkpoint + '.index'))):
             # in decoding and evaluation mode, unless specified otherwise (by `checkpoints`),
             # try to load the best checkpoint
-            model.initialize([best_checkpoint])
+            model.initialize([best_checkpoint], **params)
         else:
             # loads last checkpoint, unless `reset` is true
             model.initialize(**config)
 
-        if args.decode is not None:
+        if args.save:
+            model.save()
+        elif args.decode is not None:
             model.decode(**config)
         elif args.eval is not None:
             model.evaluate(on_dev=False, **config)

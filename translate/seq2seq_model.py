@@ -37,7 +37,7 @@ class Seq2SeqModel(object):
         if use_dropout:
             for encoder_or_decoder in encoders + decoders:
                 names = ['rnn_input', 'rnn_output', 'rnn_state', 'initial_state', 'word', 'input_layer', 'output',
-                         'attn', 'deep_layer']
+                         'attn', 'deep_layer', 'inter_layer', 'embedding']
 
                 for name in names:
                     value = encoder_or_decoder.get(name + '_dropout')

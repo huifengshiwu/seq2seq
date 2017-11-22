@@ -6,7 +6,8 @@ import tensorflow as tf
 def stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, inputs, initial_states_fw=None, initial_states_bw=None,
                                     dtype=None, sequence_length=None, parallel_iterations=None, scope=None,
                                     time_pooling=None, pooling_avg=None, initializer=None, inter_layers=None,
-                                    inter_layer_activation=None):
+                                    inter_layer_activation=None, batch_norm=None, inter_layer_keep_prob=None,
+                                    pervasive_dropout=None):
     states_fw = []
     states_bw = []
     prev_layer = inputs
@@ -39,8 +40,18 @@ def stack_bidirectional_dynamic_rnn(cells_fw, cells_bw, inputs, initial_states_f
 
                 if inter_layers and len(inter_layers) > i and inter_layers[i]:
                     layer_size = inter_layers[i]
-                    activation = tf.nn.relu if inter_layer_activation.lower() == 'relu' else None
-                    prev_layer = tf.layers.dense(prev_layer, layer_size, activation=activation, use_bias=True)
+                    prev_layer = tf.layers.dense(prev_layer, layer_size, use_bias=not batch_norm)
+
+                    if inter_layer_activation.lower() == 'relu':
+                        prev_layer = tf.nn.relu(prev_layer)
+
+                    if batch_norm:
+                        prev_layer = tf.layers.batch_normalization(prev_layer)
+
+                    if inter_layer_keep_prob is not None:
+                        noise_shape = [1, 1, tf.shape(prev_layer)[2]] if pervasive_dropout else None
+                        prev_layer = tf.nn.dropout(prev_layer, keep_prob=inter_layer_keep_prob,
+                                                   noise_shape=noise_shape)
 
             states_fw.append(state_fw)
             states_bw.append(state_bw)
