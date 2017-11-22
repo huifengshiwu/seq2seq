@@ -36,6 +36,10 @@ You should get similar BLEU scores as these (our model was trained on a single T
 | 25.04 | 28.64 | 29.22 | 240k  | 60h  |
 | 25.25 | 28.67 | 29.28 | 330k  | 80h  |
 
+Download this model [here](https://drive.google.com/file/d/1XM_76xP5kg8--BvykF3uJdCSYtdLFGX_/view?usp=sharing). To use this model, just extract the archive into the `seq2seq/models` folder, and run:
+
+     ./seq2seq.sh models/WMT14/config.yaml --decode -v
+
 #### Example German&rarr;English model
 This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.06732).
 
@@ -45,6 +49,8 @@ This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.067
 | Dev   | Test  | +beam | Steps |
 |:-----:|:-----:|:-----:|:-----:|
 | 28.32 | 25.33 | 26.74 | 44k   |
+
+The model is available for download [here](https://drive.google.com/file/d/1-RZ-uNaJvn2UuQOmYEjyQl7435CCrrB6/view?usp=sharing).
 
 ## Features
 * **YAML configuration files**
