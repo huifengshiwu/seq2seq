@@ -598,15 +598,16 @@ class TranslationModel:
         if reset:
             blacklist.append('global_step')
 
+        params = {k: kwargs[k] for k in ('variable_mapping', 'reverse_mapping')}
         if checkpoints and len(self.models) > 1:
             assert len(self.models) == len(checkpoints)
             for i, checkpoint in enumerate(checkpoints, 1):
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i), **kwargs)
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i), **params)
         elif checkpoints:  # load partial checkpoints
             for checkpoint in checkpoints:  # checkpoint files to load
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, **kwargs)
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, **params)
         elif not reset:
-            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist, **kwargs)
+            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist, **params)
 
         utils.debug('global step: {}'.format(self.global_step.eval()))
         utils.debug('baseline step: {}'.format(self.baseline_step.eval()))
