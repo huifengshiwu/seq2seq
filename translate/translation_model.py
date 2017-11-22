@@ -598,7 +598,8 @@ class TranslationModel:
         if reset:
             blacklist.append('global_step')
 
-        params = {k: kwargs[k] for k in ('variable_mapping', 'reverse_mapping')}
+        params = {k: kwargs.get(k) for k in ('variable_mapping', 'reverse_mapping')}
+
         if checkpoints and len(self.models) > 1:
             assert len(self.models) == len(checkpoints)
             for i, checkpoint in enumerate(checkpoints, 1):
