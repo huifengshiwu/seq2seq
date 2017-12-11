@@ -12,6 +12,7 @@ ENDC = '\033[0m'
 parser = argparse.ArgumentParser()
 parser.add_argument('--no-gpu', action='store_true')
 parser.add_argument('--gpu-id', type=int)
+parser.add_argument('dirs', nargs='*')
 args = parser.parse_args()
 
 extra_params = []
@@ -50,9 +51,10 @@ def get_best_score(log_file):
         return min(scores)
 
 
-def run(name, score=None):
-    config_file = os.path.join('tests', name, 'config.yaml')
-    log_file_ = os.path.join('tests', name, 'log.txt')
+def run(dir_, score=None):
+    config_file = os.path.join(dir_, 'config.yaml')
+    log_file_ = os.path.join(dir_, 'log.txt')
+    name = os.path.basename(dir_)
 
     if score is None:
         try:
@@ -86,6 +88,12 @@ def run(name, score=None):
             failure('obtained {}, expected {}'.format(score_, score))
 
 
-for name in os.listdir('tests'):
-    if os.path.isdir(os.path.join('tests', name)):
-        run(name)
+if not args.dirs:
+    dirs = [os.path.join('tests', name) for name in os.listdir('tests')]
+else:
+    dirs = args.dirs
+
+for path in dirs:
+    if os.path.isdir(path):
+        run(path)
+
