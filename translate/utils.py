@@ -11,6 +11,7 @@ import shutil
 import collections
 import functools
 import operator
+import heapq
 
 from collections import namedtuple
 from contextlib import contextmanager
@@ -317,7 +318,7 @@ def cycling_batch_iterator(data, batch_size, shuffle=True, allow_smaller=True):
 
 
 def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, allow_smaller=True,
-                              mode='standard', cycle=True, **kwargs):
+                              mode='standard', cycle=True, crash_test=False, **kwargs):
     """
     Same iterator as `cycling_batch_iterator`, except that it reads a number of batches
     at once, and sorts their content according to their size.
@@ -338,6 +339,14 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
     else:
         iterator = cycling_batch_iterator(data, batch_size, shuffle=shuffle, allow_smaller=allow_smaller)
 
+    if crash_test:
+        n = batch_size // 2
+        dummy_batch = heapq.nlargest(n, data, key=lambda p: len(p[0]))
+        dummy_batch += heapq.nlargest(batch_size - n, data, key=lambda p: len(p[1]))
+
+        while True:
+            yield dummy_batch
+
     if read_ahead is None or read_ahead <= 1:
         yield from iterator
 
@@ -355,7 +364,7 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
         if not any(batches):
             break
 
-        if shuffle:
+        if shuffle:  # TODO: enable shuffling here without epoch shuffling
             random.shuffle(batches)
         for batch in batches:
             yield batch
@@ -363,12 +372,14 @@ def read_ahead_batch_iterator(data, batch_size, read_ahead=10, shuffle=True, all
 
 def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, character_level=None,
                        sort_by_length=False, max_seq_len=None, read_ahead=10, shuffle=True,
-                       binary=None, mode='standard'):
+                       binary=None, mode='standard', crash_test=False):
     read_shard = functools.partial(read_dataset,
         paths=paths, extensions=extensions, vocabs=vocabs, max_size=max_size, max_seq_len=max_seq_len,
         character_level=character_level, sort_by_length=sort_by_length, binary=binary)
     batch_iterator = functools.partial(read_ahead_batch_iterator, batch_size=batch_size, read_ahead=read_ahead,
-                                       shuffle=shuffle, mode=mode)
+                                       shuffle=shuffle, mode=mode, crash_test=crash_test)
+
+    # FIXME: crash test only for first shard
 
     with open(paths[-1]) as f:   # count lines
         line_count = sum(1 for _ in f)
@@ -535,12 +546,15 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
     """
     from matplotlib import pyplot as plt
 
+    weights *= 10
+
     xlabels = xlabels or []
     ylabels = ylabels or []
 
     fig, ax = plt.subplots()
 
     plt.autoscale(enable=True, axis='x', tight=True)
+    #ax.pcolor(weights, cmap=plt.cm.Greys)
     ax.pcolor(weights, cmap=plt.cm.Greys)
     ax.set_frame_on(False)
     # plt.colorbar(mappable=heatmap_)

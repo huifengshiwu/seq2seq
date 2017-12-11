@@ -1,10 +1,11 @@
-label: 'ASR character-level baseline'
+label: 'LibriSpeech ASR'
+description: "Character-Level Automatic Speech Recognition on LibriSpeech"
 
 data_dir: data/audiobooks
-model_dir: models/audiobooks/ASR/baseline_char
-train_prefix: train.shuf
-max_train_size: 20000
-vocab_prefix: vocab
+model_dir: models/ICASSP/Books/ASR
+max_train_size: 10000
+train_prefix: train
+dev_prefix: [dev]
 
 optimizer: adam
 learning_rate: 0.001
@@ -13,9 +14,9 @@ batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 5.0
 
-steps_per_checkpoint: 2000
-steps_per_eval: 2000
-max_steps: 100000
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 500000
 score_function: corpus_scores_wer
 
 cell_size: 256
@@ -26,32 +27,32 @@ encoders:
   - name: feats41
     embedding_size: 41
     layers: 3
+    cell_size: 256
     conv_filters: [16, 16]
     conv_size: [3, 3]
     conv_strides: [2, 2]
     conv_activation: relu
     binary: True
-    max_len: 1500  # 90% coverage
+    max_len: 1400
     input_layers: [256, 128]
     input_layer_activation: tanh
     bidir_projection: True
-    final_state: concat_last
+    final_state: average
     train_initial_states: False
 
 decoders:
   - name: char.en
-    layers: 2
-    embedding_size: 64
+    conditional_rnn: True
+    pred_deep_layer: True
     character_level: True
-    max_len: 350  # 98% coverage
-    pred_maxout_layer: False
-    use_previous_word: False
-    pred_embed_proj: False
-    rnn_feed_attn: True
+    use_previous_word: True
+    deep_layer_size: 256
+    embedding_size: 128
+    max_len: 300
 
 use_dropout: True
 pervasive_dropout: True
-attn_dropout: 0.4
-rnn_input_dropout: 0.4
-initial_state_dropout: 0.4
-input_layer_dropout: 0.4
+attn_dropout: 0.2
+rnn_input_dropout: 0.2
+initial_state_dropout: 0.2
+input_layer_dropout: 0.2

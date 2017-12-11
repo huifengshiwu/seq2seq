@@ -1,22 +1,24 @@
-label: 'Automatic speech recognition character-level baseline'
+label: 'BTEC ASR'
+description: "Multi-Speaker Character-Level Automatic Speech Recognition on BTEC"
 
-data_dir: data/audiobooks
-model_dir: models/audiobooks/AST/baseline_char
-train_prefix: train.shuf
-max_train_size: 20000
-vocab_prefix: vocab
+data_dir: data/BTEC
+model_dir: models/ICASSP/BTEC/ASR
+max_train_size: 40000
+train_prefix: train.concat.shuf
+
 
 optimizer: adam
 learning_rate: 0.001
-batch_size: 32
+batch_size: 64
 batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 5.0
 
-steps_per_checkpoint: 2000
-steps_per_eval: 2000
-max_steps: 100000
-score_function: corpus_scores
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 60000
+score_function: corpus_scores_wer
+
 
 cell_size: 256
 attn_size: 256
@@ -26,12 +28,13 @@ encoders:
   - name: feats41
     embedding_size: 41
     layers: 3
+    cell_size: 256
     conv_filters: [16, 16]
     conv_size: [3, 3]
     conv_strides: [2, 2]
     conv_activation: relu
     binary: True
-    max_len: 1500  # 90% coverage
+    max_len: 600
     input_layers: [256, 128]
     input_layer_activation: tanh
     bidir_projection: True
@@ -41,13 +44,12 @@ encoders:
 decoders:
   - name: char.fr
     layers: 2
-    embedding_size: 64
     character_level: True
-    max_len: 460  # 98% coverage
     pred_maxout_layer: False
     use_previous_word: False
     pred_embed_proj: False
-    rnn_feed_attn: True
+    embedding_size: 64
+    max_len: 140
 
 use_dropout: True
 pervasive_dropout: True

@@ -138,6 +138,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.word_keep_prob,
                                                 noise_shape=noise_shape)
 
+                size = tf.shape(encoder_inputs_)[2]
+                noise_shape = [1, 1, size] if encoder.pervasive_dropout else [batch_size, time_steps, size]
+                encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.embedding_keep_prob,
+                                                noise_shape=noise_shape)
+
             if encoder.input_layers:
                 for j, layer_size in enumerate(encoder.input_layers):
                     if encoder.input_layer_activation is not None and encoder.input_layer_activation.lower() == 'relu':
@@ -148,9 +153,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=activation, use_bias=True,
                                             name='layer_{}'.format(j))
                     if encoder.use_dropout:
-                        noise_shape = [1, 1, tf.shape(encoder_inputs_)[2]] if encoder.pervasive_dropout else None
-                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob,
-                                                        noise_shape=noise_shape)
+                        encoder_inputs_ = tf.nn.dropout(encoder_inputs_, keep_prob=encoder.input_layer_keep_prob)
 
             if encoder.conv_filters:
                 encoder_inputs_ = tf.expand_dims(encoder_inputs_, axis=3)
@@ -168,6 +171,9 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
                     if encoder.conv_activation.lower == 'relu':
                         encoder_inputs_ = tf.nn.relu(encoder_inputs_)
+                    if encoder.batch_norm:
+                        encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_,
+                                                                        name='batch_norm_{}'.format(k))
 
                     encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / strides[1]))
 
@@ -184,8 +190,6 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                         dtype=tf.float32
                     )
                     encoder_inputs_ = tf.concat(encoder_inputs_, axis=2)
-
-            # TODO: dropout after conv
 
             if encoder.convolutions:
                 if encoder.binary:
@@ -243,10 +247,14 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             # Contrary to Theano's RNN implementation, states after the sequence length are zero
             # (while Theano repeats last state)
+            inter_layer_keep_prob = None if not encoder.use_dropout else encoder.inter_layer_keep_prob
+
             parameters = dict(
                 inputs=encoder_inputs_, sequence_length=encoder_input_length_,
                 dtype=tf.float32, parallel_iterations=encoder.parallel_iterations,
                 inter_layers=encoder.inter_layers, inter_layer_activation=encoder.inter_layer_activation,
+                batch_norm=encoder.batch_norm, inter_layer_keep_prob=inter_layer_keep_prob,
+                pervasive_dropout=encoder.pervasive_dropout
             )
 
             input_size = encoder_inputs_.get_shape()[2].value
@@ -299,9 +307,13 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             if encoder.final_state == 'concat_last': # concats last states of all backward layers (full LSTM states)
                 encoder_state_ = tf.concat(encoder_states_, axis=1)
             elif encoder.final_state == 'average':
-                mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_inputs_)[1], dtype=tf.float32)
+                mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_outputs_)[1], dtype=tf.float32)
                 mask = tf.expand_dims(mask, axis=2)
                 encoder_state_ = tf.reduce_sum(mask * encoder_outputs_, axis=1) / tf.reduce_sum(mask, axis=1)
+            elif encoder.final_state == 'average_inputs':
+                mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_inputs_)[1], dtype=tf.float32)
+                mask = tf.expand_dims(mask, axis=2)
+                encoder_state_ = tf.reduce_sum(mask * encoder_inputs_, axis=1) / tf.reduce_sum(mask, axis=1)
             elif encoder.bidir:   # last backward hidden state (FIXME apply mask)
                 encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]
             else:  # use hidden state
@@ -319,26 +331,30 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
 
 def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_dropout=False, layer_norm=False,
-                   **kwargs):
+                   mult_attn=False, **kwargs):
     if attn_keep_prob is not None:
         state_noise_shape = [1, tf.shape(state)[1]] if pervasive_dropout else None
         state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=state_noise_shape)
         hidden_noise_shape = [1, 1, tf.shape(hidden)[2]] if pervasive_dropout else None
         hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob, noise_shape=hidden_noise_shape)
 
-    y = dense(state, attn_size, use_bias=not layer_norm, name='W_a')
-    y = tf.expand_dims(y, axis=1)
+    if mult_attn:
+        state = dense(state, attn_size, use_bias=False, name='state')
+        hidden = dense(hidden, attn_size, use_bias=False, name='hidden')
+        return tf.einsum('ijk,ik->ij', hidden, state)
+    else:
+        y = dense(state, attn_size, use_bias=not layer_norm, name='W_a')
+        y = tf.expand_dims(y, axis=1)
 
-    if layer_norm:
-        y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
-        hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
+        if layer_norm:
+            y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
+            hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
 
-    f = dense(hidden, attn_size, use_bias=False, name='U_a')
+        f = dense(hidden, attn_size, use_bias=False, name='U_a')
 
-    v = get_variable('v_a', [attn_size])
-    s = f + y
-
-    return tf.reduce_sum(v * tf.tanh(s), axis=2)
+        v = get_variable('v_a', [attn_size])
+        s = f + y
+        return tf.reduce_sum(v * tf.tanh(s), axis=2)
 
 
 def compute_energy_with_filter(hidden, state, prev_weights, attn_filters, attn_filter_length,
@@ -385,7 +401,7 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size,
                                attn_keep_prob=encoder.attn_keep_prob, pervasive_dropout=encoder.pervasive_dropout,
-                               layer_norm=encoder.layer_norm, **kwargs)
+                               layer_norm=encoder.layer_norm, mult_attn=encoder.mult_attn, **kwargs)
 
         e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
@@ -583,12 +599,20 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     batch_size = input_shape[0]
     time_steps = input_shape[1]
 
+    scope_name = 'decoder_{}'.format(decoder.name)
+    scope_name += '/' + '_'.join(encoder.name for encoder in encoders)
+
     def embed(input_):
         embedded_input = tf.nn.embedding_lookup(embedding, input_)
 
         if decoder.use_dropout and decoder.word_keep_prob is not None:
-            noise_shape = [1, 1] if decoder.pervasive_dropout else [tf.shape(input_)[0], 1]
+            noise_shape = [1, 1] if decoder.pervasive_dropout else [batch_size, 1]
             embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob, noise_shape=noise_shape)
+        if decoder.use_dropout and decoder.embedding_keep_prob is not None:
+            size = tf.shape(embedded_input)[1]
+            noise_shape = [1, size] if decoder.pervasive_dropout else [batch_size, size]
+            embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.embedding_keep_prob,
+                                           noise_shape=noise_shape)
 
         return embedded_input
 
@@ -631,6 +655,14 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         parameters = dict(hidden_states=attention_states, encoder_input_length=encoder_input_length,
                           encoders=encoders, aggregation_method=decoder.aggregation_method)
         context, new_weights = multi_attention(state, pos=pos_, prev_weights=prev_weights_, **parameters)
+
+        if decoder.context_mapping:
+            with tf.variable_scope(scope_name):
+                activation = tf.nn.tanh if decoder.context_mapping_activation == 'tanh' else None
+                use_bias = not decoder.context_mapping_no_bias
+                context = dense(context, decoder.context_mapping, use_bias=use_bias, activation=activation,
+                                name='context_mapping')
+
         return context, new_weights[align_encoder_id]
 
     def update(state, input_, context=None, symbol=None):
@@ -717,27 +749,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         return output_
 
     state_size = (decoder.cell_size * 2 if decoder.cell_type.lower() == 'lstm' else decoder.cell_size) * decoder.layers
-    time = tf.constant(0, dtype=tf.int32, name='time')
-
-    outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
-    samples = tf.TensorArray(dtype=tf.int64, size=time_steps)
-    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps).unstack(tf.to_int64(tf.transpose(decoder_inputs)))
-
-    states = tf.TensorArray(dtype=tf.float32, size=time_steps)
-    weights = tf.TensorArray(dtype=tf.float32, size=time_steps)
-    attns = tf.TensorArray(dtype=tf.float32, size=time_steps)
-
-    initial_symbol = inputs.read(0)  # first symbol is BOS
-    initial_input = embed(initial_symbol)
-    initial_pos = tf.zeros([batch_size], tf.float32)
-    initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
 
     if decoder.use_dropout:
-        noise_shape = [1, tf.shape(initial_state)[1]] if decoder.pervasive_dropout else None
-        initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob,
-                                      noise_shape=noise_shape)
+        initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
-    with tf.variable_scope('decoder_{}'.format(decoder.name)):
+    with tf.variable_scope(scope_name):
         if decoder.layer_norm:
             initial_state = dense(initial_state, state_size, use_bias=False, name='initial_state_projection')
             initial_state = tf.contrib.layers.layer_norm(initial_state, activation_fn=tf.nn.tanh,
@@ -751,14 +767,25 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     else:
         initial_output = initial_state[:, -decoder.cell_size:]
 
-    initial_context, _ = look(initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights)
-    initial_data = tf.concat([initial_state, initial_context, tf.expand_dims(initial_pos, axis=1), initial_weights],
+    time = tf.constant(0, dtype=tf.int32, name='time')
+    outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
+    samples = tf.TensorArray(dtype=tf.int64, size=time_steps)
+    inputs = tf.TensorArray(dtype=tf.int64, size=time_steps).unstack(tf.to_int64(tf.transpose(decoder_inputs)))
+
+    states = tf.TensorArray(dtype=tf.float32, size=time_steps)
+    weights = tf.TensorArray(dtype=tf.float32, size=time_steps)
+    attns = tf.TensorArray(dtype=tf.float32, size=time_steps)
+
+    initial_symbol = inputs.read(0)  # first symbol is BOS
+    initial_input = embed(initial_symbol)
+    initial_pos = tf.zeros([batch_size], tf.float32)
+    initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
+    initial_data = tf.concat([initial_state, tf.expand_dims(initial_pos, axis=1), initial_weights],
                              axis=1)
-    context_size = initial_context.shape[1].value
 
     def get_logits(state, ids, time):  # for beam-search decoding
         with tf.variable_scope('decoder_{}'.format(decoder.name)):
-            state, context, pos, prev_weights = tf.split(state, [state_size, context_size, 1, -1], axis=1)
+            state, pos, prev_weights = tf.split(state, [state_size, 1, -1], axis=1)
             input_ = embed(ids)
 
             pos = tf.squeeze(pos, axis=1)

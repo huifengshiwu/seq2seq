@@ -107,12 +107,12 @@ class TranslationModel:
             self.reversed_scores = False  # the higher the better
 
     def read_data(self, max_train_size, max_dev_size, read_ahead=10, batch_mode='standard', shuffle=True,
-                  **kwargs):
+                  crash_test=False, **kwargs):
         utils.debug('reading training data')
         self.batch_iterator, self.train_size = utils.get_batch_iterator(
             self.filenames.train, self.extensions, self.vocabs, self.batch_size,
             max_size=max_train_size, character_level=self.character_level, max_seq_len=self.max_len,
-            read_ahead=read_ahead, mode=batch_mode, shuffle=shuffle, binary=self.binary,
+            read_ahead=read_ahead, mode=batch_mode, shuffle=shuffle, binary=self.binary, crash_test=crash_test
         )
 
         utils.debug('reading development data')
@@ -201,13 +201,18 @@ class TranslationModel:
 
 
     def align(self, output=None, align_encoder_id=0, **kwargs):
-        if self.binary and any(self.binary):
-            raise NotImplementedError
+        # if self.binary and any(self.binary):
+        #     raise NotImplementedError
 
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
 
-        for line_id, lines in enumerate(utils.read_lines(self.filenames.test)):
+        binary = self.binary and any(self.binary)
+
+        paths = self.filenames.test or [None]
+        lines = utils.read_lines(paths, binary=self.binary)
+
+        for line_id, lines in enumerate(lines):
             token_ids = [
                 sentence if vocab is None else
                 utils.sentence_to_token_ids(sentence, vocab.vocab, character_level=self.character_level.get(ext))
@@ -223,7 +228,10 @@ class TranslationModel:
             weights = weights.squeeze()
             max_len = weights.shape[1]
 
-            src_tokens = lines[align_encoder_id].split()[:max_len - 1] + [utils._EOS]
+            if binary:
+                src_tokens = None
+            else:
+                src_tokens = lines[align_encoder_id].split()[:max_len - 1] + [utils._EOS]
             trg_tokens = trg_tokens[:weights.shape[0] - 1] + [utils._EOS]
 
             output_file = '{}.{}.svg'.format(output, line_id + 1) if output is not None else None
@@ -590,15 +598,17 @@ class TranslationModel:
         if reset:
             blacklist.append('global_step')
 
+        params = {k: kwargs.get(k) for k in ('variable_mapping', 'reverse_mapping')}
+
         if checkpoints and len(self.models) > 1:
             assert len(self.models) == len(checkpoints)
             for i, checkpoint in enumerate(checkpoints, 1):
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i))
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i), **params)
         elif checkpoints:  # load partial checkpoints
             for checkpoint in checkpoints:  # checkpoint files to load
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist)
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, **params)
         elif not reset:
-            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist)
+            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist, **params)
 
         utils.debug('global step: {}'.format(self.global_step.eval()))
         utils.debug('baseline step: {}'.format(self.baseline_step.eval()))
@@ -607,30 +617,25 @@ class TranslationModel:
         save_checkpoint(tf.get_default_session(), self.saver, self.checkpoint_dir, self.global_step)
 
 
-variable_mapping = [   # map old names to new names
-    # (r'/layer_norm_basic_lstm_cell', r'/basic_lstm_cell'),
-    # (r'/forward_1/initial_state', r'/initial_state_fw'),
-    # (r'/backward_1/initial_state', r'/initial_state_bw'),
-    # (r'map_attns/Matrix', r'map_attns/matrix'),
-    # (r'/weights', r'/kernel'),
-    # (r'/biases', r'/bias'),
-    # (r'/Matrix', r'/kernel'),
-    # (r'/Bias', r'/bias'),
-    # (r'/softmax/', r'/softmax1/'),
-]
-
-reverse_mapping = [   # map new names to old names
-    # (r'/dropout_gru_cell', r'/gru_cell')
-    # (r'/attention_.*?/U_a/kernel', '/attention/U_a'),
-    # (r'/attention_.*?/', r'/attention/'),
+# hard-coded variables which can also be defined in config file (variable_mapping and reverse_mapping)
+global_variable_mapping = []   # map old names to new names
+global_reverse_mapping = [     # map new names to old names
+    (r'decoder_(.*?)/.*/initial_state_projection/', r'decoder_\1/initial_state_projection/'),
 ]
 
 
-def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=None):
+def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=None, variable_mapping=None,
+                    reverse_mapping=None):
     """
     if `filename` is None, we load last checkpoint, otherwise
       we ignore `checkpoint_dir` and load the given checkpoint file.
     """
+    variable_mapping = variable_mapping or []
+    reverse_mapping = reverse_mapping or []
+
+    variable_mapping = list(variable_mapping) + global_variable_mapping
+    reverse_mapping = list(reverse_mapping) + global_reverse_mapping
+
     if filename is None:
         # load last checkpoint
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
