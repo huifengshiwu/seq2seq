@@ -14,9 +14,9 @@ scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize 
 --vocab-size 30000 --shuffle --seed 1234
 
 cat ${raw_data}/WMT14.fr-en.{fr,en} > ${data_dir}/train.concat
-scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.joint -s 40000
-ln -s ${data_dir}/bpe.joint ${data_dir}/bpe.joint.fr
-ln -s ${data_dir}/bpe.joint ${data_dir}/bpe.joint.en
+scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.joint -s 30000
+cp ${data_dir}/bpe.joint ${data_dir}/bpe.joint.fr
+cp ${data_dir}/bpe.joint ${data_dir}/bpe.joint.en
 rm ${data_dir}/train.concat
 
 scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize \

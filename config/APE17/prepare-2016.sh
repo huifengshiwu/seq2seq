@@ -15,6 +15,9 @@ max_char_vocab_size=200
 rm -rf ${data_dir}
 mkdir -p ${data_dir}
 
+
+
+
 cp ${raw_data}/train.{mt,pe,src} ${data_dir}
 cp ${raw_data}/{dev,test,500K}.{src,mt,pe} ${data_dir}
 

@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+
+
+
+
+
+
 raw_data=raw_data/APE17
 data_dir=data/APE17
 
@@ -25,7 +31,7 @@ cp ${data_dir}/500K.pe ${data_dir}/train.concat.pe
 cp ${data_dir}/500K.src ${data_dir}/train.concat.src
 cp ${data_dir}/500K.edits ${data_dir}/train.concat.edits
 
-for i in {1..10}; do   # oversample PE data
+for i in {1..20}; do   # oversample PE data
     cat ${data_dir}/train.mt >> ${data_dir}/train.concat.mt
     cat ${data_dir}/train.pe >> ${data_dir}/train.concat.pe
     cat ${data_dir}/train.src >> ${data_dir}/train.concat.src
@@ -41,13 +47,11 @@ scripts/learn_bpe.py -i ${data_dir}/train.de -o ${data_dir}/bpe.de -s ${max_voca
 scripts/learn_bpe.py -i ${data_dir}/train.src -o ${data_dir}/bpe.src -s ${max_vocab_size} --min-freq 5
 
 scripts/apply_bpe.py -i ${data_dir}/train.de -o ${data_dir}/train.subwords.de -c ${data_dir}/bpe.de
-for corpus in train dev test; do
+for corpus in train dev test test.2017; do
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.mt -o ${data_dir}/${corpus}.subwords.mt -c ${data_dir}/bpe.de
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.pe -o ${data_dir}/${corpus}.subwords.pe -c ${data_dir}/bpe.de
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.src -o ${data_dir}/${corpus}.subwords.src -c ${data_dir}/bpe.src
 done
-scripts/apply_bpe.py -i ${data_dir}/test.2017.mt -o ${data_dir}/test.2017.subwords.mt -c ${data_dir}/bpe.de
-scripts/apply_bpe.py -i ${data_dir}/test.2017.src -o ${data_dir}/test.2017.subwords.src -c ${data_dir}/bpe.src
 
 scripts/learn_bpe.py -i ${data_dir}/train.concat.de -o ${data_dir}/bpe.concat.de -s ${max_vocab_size} --min-freq 5
 scripts/learn_bpe.py -i ${data_dir}/train.concat.src -o ${data_dir}/bpe.concat.src -s ${max_vocab_size} --min-freq 5
@@ -56,13 +60,11 @@ scripts/apply_bpe.py -i ${data_dir}/train.concat.de -o ${data_dir}/train.concat.
 scripts/apply_bpe.py -i ${data_dir}/train.concat.mt -o ${data_dir}/train.concat.subwords.mt -c ${data_dir}/bpe.de
 scripts/apply_bpe.py -i ${data_dir}/train.concat.pe -o ${data_dir}/train.concat.subwords.pe -c ${data_dir}/bpe.de
 scripts/apply_bpe.py -i ${data_dir}/train.concat.src -o ${data_dir}/train.concat.subwords.src -c ${data_dir}/bpe.src
-for corpus in dev test; do
+for corpus in dev test test.2017; do
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.mt -o ${data_dir}/${corpus}.concat.subwords.mt -c ${data_dir}/bpe.de
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.pe -o ${data_dir}/${corpus}.concat.subwords.pe -c ${data_dir}/bpe.de
     scripts/apply_bpe.py -i ${data_dir}/${corpus}.src -o ${data_dir}/${corpus}.concat.subwords.src -c ${data_dir}/bpe.src
 done
-scripts/apply_bpe.py -i ${data_dir}/test.2017.mt -o ${data_dir}/test.2017.concat.subwords.mt -c ${data_dir}/bpe.de
-scripts/apply_bpe.py -i ${data_dir}/test.2017.src -o ${data_dir}/test.2017.concat.subwords.src -c ${data_dir}/bpe.src
 
 # prepare vocabs
 
