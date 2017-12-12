@@ -18,7 +18,7 @@ class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, score_function='corpus_scores', name=None, ref_ext=None,
                  pred_edits=False, dual_output=False, binary=None, truncate_lines=True, ensemble=False,
-                 checkpoints=None, beam_size=1, len_normalization=1, early_stopping=True, **kwargs):
+                 checkpoints=None, beam_size=1, len_normalization=1, early_stopping=True, lexicon=None, **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
@@ -70,7 +70,13 @@ class TranslationModel:
 
         for encoder_or_decoder, vocab in zip(encoders + decoders, self.vocabs):
             if vocab:
-                encoder_or_decoder.vocab_size = len(vocab.reverse)
+                if encoder_or_decoder.vocab_size:   # reduce vocab size
+                    vocab.reverse[:] = vocab.reverse[:encoder_or_decoder.vocab_size]
+                    for token, token_id in list(vocab.vocab.items()):
+                        if token_id >= encoder_or_decoder.vocab_size:
+                            del vocab.vocab[token]
+                else:
+                    encoder_or_decoder.vocab_size = len(vocab.reverse)
 
         utils.debug('creating model')
 
@@ -100,6 +106,12 @@ class TranslationModel:
         self.epoch = None
 
         self.training = utils.AttrDict()  # used to keep track of training
+
+        if lexicon:
+            with open(lexicon) as lexicon_file:
+                self.lexicon = dict(line.split() for line in lexicon_file)
+        else:
+            self.lexicon = None
 
         try:
             self.reversed_scores = getattr(evaluation, score_function).reversed  # the lower the better
@@ -135,19 +147,22 @@ class TranslationModel:
 
     def eval_step(self):
         # compute loss on dev set
+        dev_losses = []
         for prefix, dev_batches in zip(self.dev_prefix, self.dev_batches):
-            eval_loss = sum(
+            dev_loss = sum(
                 self.seq2seq_model.step(batch, update_model=False).loss * len(batch)
                 for batch in dev_batches
             )
-            eval_loss /= sum(map(len, dev_batches))
+            dev_loss /= sum(map(len, dev_batches))
+            dev_losses.append(dev_loss)
 
-            utils.log("  {} eval: loss {:.2f}".format(prefix, eval_loss))
+            utils.log("  {} eval: loss {:.2f}".format(prefix, dev_loss))
+        return dev_losses
 
     def decode_sentence(self, sentence_tuple, remove_unk=False):
         return next(self.decode_batch([sentence_tuple], remove_unk))
 
-    def decode_batch(self, sentence_tuples, batch_size, remove_unk=False, fix_edits=True):
+    def decode_batch(self, sentence_tuples, batch_size, remove_unk=False, fix_edits=True, unk_replace=False):
         if batch_size == 1:
             batches = ([sentence_tuple] for sentence_tuple in sentence_tuples)   # lazy
         else:
@@ -164,10 +179,10 @@ class TranslationModel:
 
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-            batch_token_ids = self.seq2seq_model.greedy_decoding(token_ids)
+            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, unk_replace=unk_replace)
             batch_token_ids = zip(*batch_token_ids)
 
-            for src_tokens, trg_token_ids in zip(batch, batch_token_ids):
+            for sentence_id, (src_tokens, trg_token_ids) in enumerate(zip(batch, batch_token_ids)):
                 trg_tokens = []
 
                 for trg_token_ids_, vocab in zip(trg_token_ids, self.trg_vocab):
@@ -179,10 +194,24 @@ class TranslationModel:
                                    for i in trg_token_ids_]
                     trg_tokens.append(trg_tokens_)
 
+                if unk_replace:
+                    weights = batch_weights[sentence_id]
+                    src_words = src_tokens[0].split()
+                    align_ids = np.argmax(weights[:,:len(src_words)], axis=1)
+
+                    def replace(token, align_id):
+                        if token == utils._UNK:
+                            token = src_words[align_id]
+                            if not token[0].isupper() and self.lexicon is not None and token in self.lexicon:
+                                token = self.lexicon[token]
+                        return token
+                    trg_tokens[0] = [replace(token, align_id) for align_id, token in zip(align_ids, trg_tokens[0])]
+
                 if self.pred_edits:
                     # first output is ops, second output is words
                     raw_hypothesis = ' '.join('_'.join(tokens) for tokens in zip(*trg_tokens))
-                    trg_tokens = utils.reverse_edits(src_tokens[0].split(), trg_tokens, fix=fix_edits)
+                    src_words = src_tokens[0].split()
+                    trg_tokens = utils.reverse_edits(src_words, trg_tokens, fix=fix_edits)
                     trg_tokens = [token for token in trg_tokens if token not in utils._START_VOCAB]
                     # FIXME: char-level
                 else:
@@ -201,9 +230,6 @@ class TranslationModel:
 
 
     def align(self, output=None, align_encoder_id=0, **kwargs):
-        # if self.binary and any(self.binary):
-        #     raise NotImplementedError
-
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
 
@@ -238,7 +264,7 @@ class TranslationModel:
 
             utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file)
 
-    def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, **kwargs):
+    def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, unk_replace=False, **kwargs):
         utils.log('starting decoding')
 
         # empty `test` means that we read from standard input, which is not possible with multiple encoders
@@ -261,7 +287,7 @@ class TranslationModel:
                 batch_size = self.batch_size
                 lines = list(lines)
 
-            hypothesis_iter = self.decode_batch(lines, batch_size, remove_unk=remove_unk)
+            hypothesis_iter = self.decode_batch(lines, batch_size, remove_unk=remove_unk, unk_replace=unk_replace)
 
             for hypothesis, raw in hypothesis_iter:
                 if raw_output:
@@ -274,7 +300,8 @@ class TranslationModel:
                 output_file.close()
 
     def evaluate(self, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
-                 raw_output=False, fix_edits=True, max_test_size=None, post_process_script=None, **kwargs):
+                 raw_output=False, fix_edits=True, max_test_size=None, post_process_script=None,
+                 dev_losses=None, unk_replace=False, **kwargs):
         """
         Decode a dev or test set, and perform evaluation with respect to gold standard, using the provided
         scoring function. If `output` is defined, also save the decoding output to this file.
@@ -307,7 +334,8 @@ class TranslationModel:
 
         scores = []
 
-        for filenames_, output_, prefix in zip(filenames, output, self.dev_prefix):  # evaluation on multiple corpora
+        # evaluation on multiple corpora
+        for dev_id, (filenames_, output_, prefix) in enumerate(zip(filenames, output, self.dev_prefix)):
             extensions = list(self.extensions)
             if self.ref_ext is not None:
                 extensions.append(self.ref_ext)
@@ -334,7 +362,7 @@ class TranslationModel:
                 trg_sentences = list(zip(*lines_[len(self.src_ext):]))
 
                 hypothesis_iter = self.decode_batch(lines, self.batch_size, remove_unk=remove_unk,
-                                                    fix_edits=fix_edits)
+                                                    fix_edits=fix_edits, unk_replace=unk_replace)
 
                 for i, (sources, hypothesis, reference) in enumerate(zip(src_sentences, hypothesis_iter,
                                                                          trg_sentences)):
@@ -366,6 +394,9 @@ class TranslationModel:
 
             # default scoring function is utils.bleu_score
             score, score_summary = getattr(evaluation, score_function)(hypotheses, references)
+
+            if score is None:
+                score = dev_losses[dev_id] if dev_losses else 0
 
             # print scoring information
             score_info = [prefix, 'score={:.2f}'.format(score)]
@@ -426,6 +457,7 @@ class TranslationModel:
         self.training.time = 0
         self.training.steps = 0
         self.training.loss = 0
+        self.training.dev_losses = []
         self.training.baseline_loss = 0
         self.training.losses = []
         self.training.last_decay = global_step
@@ -496,7 +528,7 @@ class TranslationModel:
 
             self.training.losses.append(loss)
             self.training.loss, self.training.time, self.training.steps, self.training.baseline_loss = 0, 0, 0, 0
-            self.eval_step()
+            self.training.dev_losses = self.eval_step()
 
         if steps_per_eval and global_step % steps_per_eval == 0 and 0 <= eval_burn_in <= global_step:
 
@@ -513,7 +545,7 @@ class TranslationModel:
 
             kwargs_ = dict(kwargs)
             kwargs_['output'] = output
-            score, *_ = self.evaluate(on_dev=True, **kwargs_)
+            score, *_ = self.evaluate(on_dev=True, dev_losses=self.training.dev_losses, **kwargs_)
             self.training.scores.append((global_step, score))
 
         if steps_per_eval and global_step % steps_per_eval == 0:
@@ -547,13 +579,17 @@ class TranslationModel:
             prefix = 'translate-{}.'.format(step)
             dest_prefix = 'best-{}.'.format(step)
 
+            absolute_best = all(lower(score_, score) for score_, _ in best_scores)
+            if absolute_best:
+                utils.log('new best model')
+
             for filename in os.listdir(self.checkpoint_dir):
                 if filename.startswith(prefix):
                     dest_filename = filename.replace(prefix, dest_prefix)
                     shutil.copy(full_path(filename), full_path(dest_filename))
 
                     # also copy to `best` if this checkpoint is the absolute best
-                    if all(lower(score_, score) for score_, _ in best_scores):
+                    if absolute_best:
                         dest_filename = filename.replace(prefix, 'best.')
                         shutil.copy(full_path(filename), full_path(dest_filename))
 

@@ -57,6 +57,9 @@ parser.add_argument('--batch-size', type=int, help='number of lines in a batch')
 parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False, help='disable automatic fixing of edit op sequences')
 parser.add_argument('--max-output-len', type=int, help='maximum length of the output sequence (control decoding speed)')
 
+parser.add_argument('--unk-replace', action='store_const', const=True, help='replace UNK symbols from decoding output by using attention mechanism')
+parser.add_argument('--lexicon', help='lexicon file used for UNK replacement (default: replace with aligned soruce word)')
+
 parser.add_argument('--temperature', type=float, help='temperature of the output softmax')
 parser.add_argument('--attn-temperature', type=float, help='temperature of the attention softmax')
 

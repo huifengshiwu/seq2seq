@@ -223,9 +223,13 @@ def corpus_scores(hypotheses, references, main='bleu', **kwargs):
     bleu1, _ = corpus_bleu1(hypotheses, references)
 
     scores = OrderedDict([('bleu', bleu_score), ('ter', ter), ('wer', wer), ('bleu1', bleu1), ('cer', cer)])
-    main_score = scores[main]
-    summary = ' '.join(['{}={:.2f}'.format(k, v) for k, v in scores.items() if k != main] + [summary])
 
+    if main is not None:
+        main_score = scores[main]
+    else:
+        main_score = None
+
+    summary = ' '.join(['{}={:.2f}'.format(k, v) for k, v in scores.items() if k != main] + [summary])
     return main_score, summary
 
 
@@ -237,6 +241,11 @@ def corpus_scores_ter(*args, **kwargs):
 @score_function_decorator(reversed=True)
 def corpus_scores_wer(*args, **kwargs):
     return corpus_scores(*args, main='wer', **kwargs)
+
+
+@score_function_decorator(reversed=True)
+def corpus_scores_xent(*args, **kwargs):
+    return corpus_scores(*args, main=None, **kwargs)
 
 
 corpus_scores_bleu = corpus_scores

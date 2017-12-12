@@ -234,7 +234,7 @@ class Seq2SeqModel(object):
         res = tf.get_default_session().run(output_feed, input_feed)
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
-    def greedy_decoding(self, token_ids):
+    def greedy_decoding(self, token_ids, unk_replace=False):
         for model in self.models:
             model.dropout_off.run()
 
@@ -254,8 +254,12 @@ class Seq2SeqModel(object):
                 input_feed[model.encoder_inputs[i]] = encoder_inputs[i]
                 input_feed[model.encoder_input_length[i]] = input_length[i]
 
-        outputs = tf.get_default_session().run(self.beam_outputs, input_feed)
-        return [outputs[:,0,:]]
+        output_feed = {'outputs': self.beam_outputs}
+        if unk_replace:
+            output_feed['weights'] = self.attention_weights
+
+        res = tf.get_default_session().run(output_feed, input_feed)
+        return [res['outputs'][:,0,:]], res.get('weights')
 
     def get_batch(self, data, decoding=False):
         """
