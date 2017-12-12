@@ -24,9 +24,9 @@ preprocess ${raw_data}/dev.mt ${raw_data}/true.de ${raw_data}/de.bpe ${data_dir}
 preprocess ${raw_data}/dev.pe ${raw_data}/true.de ${raw_data}/de.bpe ${data_dir}/dev.pe
 cp ${raw_data}/dev.pe ${data_dir}/dev.raw.pe
 
-preprocess ${raw_data}/test.2016.src ${raw_data}/true.en ${raw_data}/en.bpe ${data_dir}/test.src
-preprocess ${raw_data}/test.2016.mt ${raw_data}/true.de ${raw_data}/de.bpe ${data_dir}/test.mt
-cp ${raw_data}/test.2016.pe ${data_dir}/test.pe
+preprocess ${raw_data}/test.src ${raw_data}/true.en ${raw_data}/en.bpe ${data_dir}/test.src
+preprocess ${raw_data}/test.mt ${raw_data}/true.de ${raw_data}/de.bpe ${data_dir}/test.mt
+cp ${raw_data}/test.pe ${data_dir}/test.pe
 
 preprocess ${raw_data}/test.2017.src ${raw_data}/true.en ${raw_data}/en.bpe ${data_dir}/test.2017.src
 preprocess ${raw_data}/test.2017.mt ${raw_data}/true.de ${raw_data}/de.bpe ${data_dir}/test.2017.mt
