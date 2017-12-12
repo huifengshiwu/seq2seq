@@ -1,5 +1,5 @@
-label: "Baseline WMT14"
-description: "Baseline WMT14 fr->en model, similar to Bahdanau et al."
+label: "Baseline WMT14 with subwords"
+description: "Baseline WMT14 fr->en model with subwords"
 
 cell_size: 1000
 attn_size: 1000
@@ -9,12 +9,12 @@ cell_type: GRU
 
 data_dir: data/WMT14
 max_len: 50
-model_dir: models/WMT14/baseline
+model_dir: models/WMT14/subwords
 max_train_size: 1000000
 
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
-score_function: corpus_bleu
+score_function: corpus_scores_xent
 keep_best: 1
 max_to_keep: null
 
@@ -24,12 +24,13 @@ batch_size: 80
 batch_mode: standard
 read_ahead: 20
 max_gradient_norm: 1.0
-max_epochs: 5
+
+max_epochs: 10
 learning_rate_decay_factor: 0.5
 decay_every_n_epoch: 0.5
 
 attention_type: global
-final_state: last
+final_state: average
 
 weight_scale: 0.01
 
@@ -38,5 +39,16 @@ encoders:
 
 decoders:
   - name: fr
+    conditional_rnn: True
+    pred_deep_layer: True
 
 orthogonal_init: True
+
+use_dropout: True
+pervasive_dropout: True
+rnn_input_dropout: 0.2
+rnn_state_dropout: 0.0
+rnn_output_dropout: 0.2
+attn_dropout: 0.2
+word_dropout: 0.2
+initial_state_dropout: 0.2

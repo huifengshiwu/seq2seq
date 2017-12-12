@@ -12,3 +12,15 @@ scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize 
 --dev-corpus ${raw_data}/ntst1213.fr-en \
 --test-corpus ${raw_data}/ntst14.fr-en \
 --vocab-size 30000 --shuffle --seed 1234
+
+cat ${raw_data}/WMT14.fr-en.{fr,en} > ${data_dir}/train.concat
+scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.joint -s 40000
+ln -s ${data_dir}/bpe.joint ${data_dir}/bpe.joint.fr
+ln -s ${data_dir}/bpe.joint ${data_dir}/bpe.joint.en
+rm ${data_dir}/train.concat
+
+scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize \
+--subwords --bpe-path ${data_dir}/bpe.joint \
+--dev-corpus ${raw_data}/ntst1213.fr-en --dev-prefix dev.jsub \
+--test-corpus ${raw_data}/ntst14.fr-en --test-prefix test.jsub \
+--shuffle --seed 1234 --output train.jsub --vocab-prefix vocab.jsub
