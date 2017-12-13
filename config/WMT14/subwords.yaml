@@ -1,5 +1,5 @@
-label: "Baseline WMT14 with subwords"
-description: "Baseline WMT14 fr->en model with subwords"
+label: "WMT14 Deep Decoder Subwords"
+description: "Baseline WMT14 fr->en model conditional decoder + deep output + average final state + joint subwords"
 
 cell_size: 1000
 attn_size: 1000
@@ -25,7 +25,7 @@ batch_mode: standard
 read_ahead: 20
 max_gradient_norm: 1.0
 
-max_epochs: 10
+max_epochs: 5
 learning_rate_decay_factor: 0.5
 decay_every_n_epoch: 0.5
 
@@ -35,10 +35,10 @@ final_state: average
 weight_scale: 0.01
 
 encoders:
-  - name: en
+  - name: jsub.en
 
 decoders:
-  - name: fr
+  - name: jsub.fr
     conditional_rnn: True
     pred_deep_layer: True
 

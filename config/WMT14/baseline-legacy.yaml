@@ -14,7 +14,8 @@ model_dir: models/WMT14/baseline_legacy
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
 score_function: corpus_bleu
-keep_best: 8
+keep_best: 1
+max_to_keep: null
 
 optimizer: adadelta
 learning_rate: 1.0

@@ -304,6 +304,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 for stride in encoder.time_pooling[:encoder.layers - 1]:
                     encoder_input_length_ = (encoder_input_length_ + stride - 1) // stride  # rounding up
 
+            last_backward = encoder_outputs_[:, 0, encoder.cell_size:]
+            indices = tf.stack([tf.range(batch_size), encoder_input_length_ - 1], axis=1)
+            last_forward = tf.gather_nd(encoder_outputs_[:, :, :encoder.cell_size], indices)
+            last_forward.set_shape([None, encoder.cell_size])
+
             if encoder.final_state == 'concat_last': # concats last states of all backward layers (full LSTM states)
                 encoder_state_ = tf.concat(encoder_states_, axis=1)
             elif encoder.final_state == 'average':
@@ -314,10 +319,12 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(encoder_inputs_)[1], dtype=tf.float32)
                 mask = tf.expand_dims(mask, axis=2)
                 encoder_state_ = tf.reduce_sum(mask * encoder_inputs_, axis=1) / tf.reduce_sum(mask, axis=1)
-            elif encoder.bidir:   # last backward hidden state (FIXME apply mask)
-                encoder_state_ = encoder_outputs_[:, 0, encoder.cell_size:]
-            else:  # use hidden state
-                encoder_state_ = encoder_outputs_[:, -1, :]
+            elif encoder.bidir and encoder.final_state == 'last_both':
+                encoder_state_ = tf.concat([last_forward, last_backward], axis=1)
+            elif encoder.bidir and not encoder.final_state == 'last_forward':   # last backward hidden state
+                encoder_state_ = last_backward
+            else:  # last forward hidden state
+                encoder_state_ = last_forward
 
             if encoder.bidir and encoder.bidir_projection:
                 encoder_outputs_ = dense(encoder_outputs_, encoder.cell_size, use_bias=False, name='bidir_projection')
