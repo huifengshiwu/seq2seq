@@ -243,11 +243,6 @@ def corpus_scores_wer(*args, **kwargs):
     return corpus_scores(*args, main='wer', **kwargs)
 
 
-@score_function_decorator(reversed=True)
-def corpus_scores_xent(*args, **kwargs):
-    return corpus_scores(*args, main=None, **kwargs)
-
-
 corpus_scores_bleu = corpus_scores
 
 
@@ -309,3 +304,15 @@ def tercom_statistics(hypotheses, references, case_sensitive=True, **kwargs):
     os.remove(filename + '.sum')
 
     return total, stats
+
+name_mapping = {
+    'corpus_bleu': ['bleu'],
+    'corpus_ter': ['ter'],
+    'corpus_wer': ['wer'],
+    'corpus_bleu1': ['bleu1'],
+    'corpus_cer': ['cer'],
+    'corpus_scores': ['bleu', 'ter', 'wer', 'bleu1', 'cer'],
+    'corpus_scores_bleu': ['bleu', 'ter', 'wer', 'bleu1', 'cer'],
+    'corpus_scores_ter': ['ter', 'bleu', 'wer', 'bleu1', 'cer'],
+    'corpus_scores_wer': ['wer', 'bleu', 'ter', 'bleu1', 'cer']
+}

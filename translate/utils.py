@@ -601,3 +601,4 @@ def alignment_to_text(xlabels=None, ylabels=None, weights=None, output_file=None
             for j in range(len(xlabels)):
                 output_file.write('\t' + str(weights[i][j]))
             output_file.write('\n')
+

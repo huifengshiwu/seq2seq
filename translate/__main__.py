@@ -8,10 +8,11 @@ import tensorflow as tf
 import yaml
 import shutil
 import tarfile
+import random
 
 from pprint import pformat
 from operator import itemgetter
-from translate import utils
+from translate import utils, evaluation
 from translate.translation_model import TranslationModel
 from translate.multitask_model import MultiTaskModel
 
@@ -64,6 +65,8 @@ parser.add_argument('--temperature', type=float, help='temperature of the output
 parser.add_argument('--attn-temperature', type=float, help='temperature of the attention softmax')
 
 parser.add_argument('--align-encoder-id', type=int, default=0, help='id of the encoder whose attention outputs we are interested in (only useful in the multi-encoder setting)')
+parser.add_argument('--tf-seed', type=int)
+parser.add_argument('--seed', type=int)
 
 def main(args=None):
     args = parser.parse_args(args)
@@ -86,6 +89,9 @@ def main(args=None):
         # set default values for parameters that are not defined
         for k, v in default_config.items():
             config.setdefault(k, v)
+
+    if config.score_function:
+        config.score_functions = evaluation.name_mapping[config.score_function]
 
     if args.crash_test:
         config.max_train_size = 0
@@ -175,6 +181,18 @@ def main(args=None):
         if args.max_output_len is not None:   # override decoder's max len
             task.decoders[0].max_len = args.max_output_len
 
+    config.checkpoint_dir = os.path.join(config.model_dir, 'checkpoints')
+
+    # setting random seeds
+    if config.seed is None:
+        config.seed = random.randrange(sys.maxsize)
+    if config.tf_seed is None:
+        config.tf_seed = random.randrange(sys.maxsize)
+    utils.log('python random seed: {}'.format(config.seed))
+    utils.log('tf random seed:     {}'.format(config.tf_seed))
+    random.seed(config.seed)
+    tf.set_random_seed(config.tf_seed)
+
     device = None
     if config.no_gpu:
         device = '/cpu:0'
@@ -192,8 +210,6 @@ def main(args=None):
     utils.log('using device: {}'.format(device))
 
     with tf.device(device):
-        config.checkpoint_dir = os.path.join(config.model_dir, 'checkpoints')
-
         if config.weight_scale:
             if config.initializer == 'uniform':
                 initializer = tf.random_uniform_initializer(minval=-config.weight_scale, maxval=config.weight_scale)

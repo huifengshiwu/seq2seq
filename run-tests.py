@@ -35,11 +35,13 @@ except FileNotFoundError:
 
 
 def get_best_score(log_file):
+    scores = []
     with open(log_file) as f:
-        content = f.read()
+        for line in f:
+            score_ = re.search(r' ([^ ]+)=(.*?) ', line + ' ')
 
-    scores = re.findall(r'score=(.*?) ', content, flags=re.MULTILINE)
-    scores = [float(score) for score in scores]
+            if score_:
+                scores.append(float(score_.group(2)))
 
     if len(scores) == 0:
         return None
@@ -70,8 +72,8 @@ def run(dir_, score=None):
     except subprocess.CalledProcessError as e:
         output = e.output.decode()
 
-    scores = output.strip().split('\n')[-1]
-    score_ = re.search(r'score=(.*?) ', scores)
+    scores = output.strip().split('\n')[-1] + ' '
+    score_ = re.search(r' ([^ ]+)=(.*?) ', scores)
 
     with open(log_file, 'a') as f:
         f.write(output)
@@ -79,7 +81,7 @@ def run(dir_, score=None):
     if not score_:
         failure('unable to run test (see log file)')
     else:
-        score_ = float(score_.group(1)) 
+        score_ = float(score_.group(2)) 
         if score is None:
             success('obtained {}'.format(score_))
         elif score_ == score:

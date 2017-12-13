@@ -19,6 +19,7 @@ parser.add_argument('--bleu', action='store_true')
 parser.add_argument('--wer', action='store_true')
 parser.add_argument('--cer', action='store_true')
 parser.add_argument('--bleu1', action='store_true')
+parser.add_argument('--loss', action='store_true')
 
 
 def print_scores(log_file, time=False, label=None):
@@ -59,7 +60,7 @@ def print_scores(log_file, time=False, label=None):
                 if not re.search(args.task_name, line):
                     continue
 
-            m = re.findall('(bleu|score|ter|wer|cer|bleu1|penalty|ratio)=(\d+.\d+)', line)
+            m = re.findall('(loss|bleu|score|ter|wer|cer|bleu1|penalty|ratio)=(\d+.\d+)', line)
             if m:
                 scores_ = {k: float(v) for k, v in m}
                 scores.setdefault(current_step, scores_)
@@ -69,7 +70,7 @@ def print_scores(log_file, time=False, label=None):
             if score is None:
                 score = d.get('score')
 
-            if args.score in ('ter', 'wer', 'cer'):
+            if args.score in ('ter', 'wer', 'cer', 'loss'):
                 score = -score
             return score
 
@@ -79,7 +80,7 @@ def print_scores(log_file, time=False, label=None):
             missing_key = next(k for k in ['bleu', 'ter', 'wer', 'cer', 'bleu1'] if k not in best)
             best[missing_key] = best.pop('score')
 
-        keys = [args.score, 'bleu', 'ter', 'wer', 'cer', 'bleu1', 'penalty', 'ratio']
+        keys = [args.score, 'bleu', 'ter', 'wer', 'cer', 'bleu1', 'loss', 'penalty', 'ratio']
         best = sorted(best.items(), key=lambda p: keys.index(p[0]))
 
         def pretty_time(seconds):
@@ -128,6 +129,8 @@ if __name__ == '__main__':
         args.score = 'cer'
     elif args.bleu1:
         args.score = 'bleu1'
+    elif args.loss:
+        args.score = 'loss'
     elif args.bleu or args.score is None:
         args.score = 'bleu'
 

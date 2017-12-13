@@ -119,7 +119,9 @@ vocab_prefix: vocab      # name of the vocabulary files
 checkpoints: []          # list of checkpoints to load (in this specific order) after main checkpoint
 
 # decoding
-score_function: corpus_scores # name of the main scoring function, inside 'evaluation.py' (used for selecting models)
+
+# scoring functions used for evaluation, defined inside 'evaluation.py' (with corpus_ prefix)
+score_functions: [loss, bleu, wer, ter, bleu1, cer]  # the first one is the main scoring function, used for model selection
 post_process_script: null # path to post-processing script (called before evaluating)
 remove_unk: False        # remove UNK symbols from the decoder output
 beam_size: 1             # beam size for decoding (decoder is greedy by default)

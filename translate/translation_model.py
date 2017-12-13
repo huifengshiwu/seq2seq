@@ -16,7 +16,7 @@ from subprocess import Popen, PIPE
 
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
-                 batch_size, keep_best=1, dev_prefix=None, score_function='corpus_scores', name=None, ref_ext=None,
+                 batch_size, keep_best=1, dev_prefix=None, name=None, ref_ext=None,
                  pred_edits=False, dual_output=False, binary=None, truncate_lines=True, ensemble=False,
                  checkpoints=None, beam_size=1, len_normalization=1, early_stopping=True, lexicon=None, **kwargs):
 
@@ -113,11 +113,6 @@ class TranslationModel:
         else:
             self.lexicon = None
 
-        try:
-            self.reversed_scores = getattr(evaluation, score_function).reversed  # the lower the better
-        except AttributeError:
-            self.reversed_scores = False  # the higher the better
-
     def read_data(self, max_train_size, max_dev_size, read_ahead=10, batch_mode='standard', shuffle=True,
                   crash_test=False, **kwargs):
         utils.debug('reading training data')
@@ -144,20 +139,6 @@ class TranslationModel:
             for vocab_path, binary in zip(self.filenames.vocab, self.binary)
         ]
         self.src_vocab, self.trg_vocab = self.vocabs[:len(self.src_ext)], self.vocabs[len(self.src_ext):]
-
-    def eval_step(self):
-        # compute loss on dev set
-        dev_losses = []
-        for prefix, dev_batches in zip(self.dev_prefix, self.dev_batches):
-            dev_loss = sum(
-                self.seq2seq_model.step(batch, update_model=False).loss * len(batch)
-                for batch in dev_batches
-            )
-            dev_loss /= sum(map(len, dev_batches))
-            dev_losses.append(dev_loss)
-
-            utils.log("  {} eval: loss {:.2f}".format(prefix, dev_loss))
-        return dev_losses
 
     def decode_sentence(self, sentence_tuple, remove_unk=False):
         return next(self.decode_batch([sentence_tuple], remove_unk))
@@ -299,9 +280,9 @@ class TranslationModel:
             if output_file is not None:
                 output_file.close()
 
-    def evaluate(self, score_function, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
+    def evaluate(self, score_functions, on_dev=True, output=None, remove_unk=False, max_dev_size=None,
                  raw_output=False, fix_edits=True, max_test_size=None, post_process_script=None,
-                 dev_losses=None, unk_replace=False, **kwargs):
+                 unk_replace=False, **kwargs):
         """
         Decode a dev or test set, and perform evaluation with respect to gold standard, using the provided
         scoring function. If `output` is defined, also save the decoding output to this file.
@@ -319,7 +300,7 @@ class TranslationModel:
         :param fix_edits: when predicting edit operations, pad shorter hypotheses with KEEP symbols.
         :return: scores of each corpus to evaluate
         """
-        utils.log('starting decoding')
+        utils.log('starting evaluation')
 
         if on_dev:
             filenames = self.filenames.dev
@@ -336,6 +317,14 @@ class TranslationModel:
 
         # evaluation on multiple corpora
         for dev_id, (filenames_, output_, prefix) in enumerate(zip(filenames, output, self.dev_prefix)):
+            if self.dev_batches:
+                dev_batches = self.dev_batches[dev_id]
+                dev_loss = sum(self.seq2seq_model.step(batch, update_model=False).loss * len(batch)
+                               for batch in dev_batches)
+                dev_loss /= sum(map(len, dev_batches))
+            else:  # TODO
+                dev_loss = 0
+
             extensions = list(self.extensions)
             if self.ref_ext is not None:
                 extensions.append(self.ref_ext)
@@ -392,23 +381,40 @@ class TranslationModel:
                 data = Popen([post_process_script], stdout=PIPE, stdin=PIPE).communicate(input=data)[0].decode()
                 hypotheses = data.splitlines()
 
-            # default scoring function is utils.bleu_score
-            score, score_summary = getattr(evaluation, score_function)(hypotheses, references)
+            scores_ = []
+            summary = None
 
-            if score is None:
-                score = dev_losses[dev_id] if dev_losses else 0
+            for score_function in score_functions:
+                try:
+                    if score_function == 'loss':
+                        score = dev_loss
+                        reversed_ = True
+                    else:
+                        fun = getattr(evaluation, 'corpus_' + score_function)
+                        try:
+                            reversed_ = fun.reversed
+                        except AttributeError:
+                            reversed_ = False
+                        score, score_summary = fun(hypotheses, references)
+                        summary = summary or score_summary
 
-            # print scoring information
-            score_info = [prefix, 'score={:.2f}'.format(score)]
+                    scores_.append((score_function, score, reversed_))
+                except:
+                    pass
 
-            if score_summary:
-                score_info.append(score_summary)
+            score_info = ['{}={:.2f}'.format(key, value) for key, value, _ in scores_]
+            score_info.insert(0, prefix)
+            if summary:
+                score_info.append(summary)
 
             if self.name is not None:
                 score_info.insert(0, self.name)
 
             utils.log(' '.join(map(str, score_info)))
-            scores.append(score)
+
+            # main score
+            _, score, reversed_ = scores_[0]
+            scores.append(-score if reversed_ else score)
 
         return scores
 
@@ -457,7 +463,6 @@ class TranslationModel:
         self.training.time = 0
         self.training.steps = 0
         self.training.loss = 0
-        self.training.dev_losses = []
         self.training.baseline_loss = 0
         self.training.losses = []
         self.training.last_decay = global_step
@@ -528,7 +533,6 @@ class TranslationModel:
 
             self.training.losses.append(loss)
             self.training.loss, self.training.time, self.training.steps, self.training.baseline_loss = 0, 0, 0, 0
-            self.training.dev_losses = self.eval_step()
 
         if steps_per_eval and global_step % steps_per_eval == 0 and 0 <= eval_burn_in <= global_step:
 
@@ -545,7 +549,7 @@ class TranslationModel:
 
             kwargs_ = dict(kwargs)
             kwargs_['output'] = output
-            score, *_ = self.evaluate(on_dev=True, dev_losses=self.training.dev_losses, **kwargs_)
+            score, *_ = self.evaluate(on_dev=True, **kwargs_)
             self.training.scores.append((global_step, score))
 
         if steps_per_eval and global_step % steps_per_eval == 0:
@@ -566,20 +570,18 @@ class TranslationModel:
         if any(step_ >= step for _, step_ in scores):
             utils.warn('inconsistent scores.txt file')
 
-        best_scores = sorted(scores, reverse=not self.reversed_scores)[:self.keep_best]
+        best_scores = sorted(scores, reverse=True)[:self.keep_best]
 
         def full_path(filename):
             return os.path.join(self.checkpoint_dir, filename)
 
-        lower = (lambda x, y: y < x) if self.reversed_scores else (lambda x, y: x < y)
-
-        if any(lower(score_, score) for score_, _ in best_scores) or not best_scores:
+        if any(score_ < score for score_, _ in best_scores) or not best_scores:
             # if this checkpoint is in the top, save it under a special name
 
             prefix = 'translate-{}.'.format(step)
             dest_prefix = 'best-{}.'.format(step)
 
-            absolute_best = all(lower(score_, score) for score_, _ in best_scores)
+            absolute_best = all(score_ < score for score_, _ in best_scores)
             if absolute_best:
                 utils.log('new best model')
 
@@ -593,7 +595,7 @@ class TranslationModel:
                         dest_filename = filename.replace(prefix, 'best.')
                         shutil.copy(full_path(filename), full_path(dest_filename))
 
-            best_scores = sorted(best_scores + [(score, step)], reverse=not self.reversed_scores)
+            best_scores = sorted(best_scores + [(score, step)], reverse=True)
 
             for _, step_ in best_scores[self.keep_best:]:
                 # remove checkpoints that are not in the top anymore

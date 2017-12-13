@@ -154,7 +154,7 @@ for step_multiplier, step_delta, log_file in zip(args.step_multiplier, args.step
                 if m:
                     current_step = int((int(m.group(1)) - step_delta) / step_multiplier)
 
-            if right_task:
+            if right_task:  # FIXME
                 prefix = '^{} '.format(args.eval_name) if args.eval_name else ''
                 m = re.search(prefix + r'eval: loss (-?\d+.\d+)', line)
 
@@ -177,6 +177,11 @@ for step_multiplier, step_delta, log_file in zip(args.step_multiplier, args.step
 
             if args.eval_name and not re.search('(^|\s)' + args.eval_name + ' score=', line):
                 continue
+
+            m = re.search(r'loss=(\d+\.\d+)', line)
+            if m and not any(step == current_step for step, _ in dev_perplexities):
+                perplexity = float(m.group(1))
+                dev_perplexities.append((current_step, perplexity))
 
             m = re.search(r'bleu=(\d+\.\d+)', line)
             m = m or re.search(r'score=(\d+\.\d+)', line)
