@@ -38,7 +38,7 @@ def get_best_score(log_file):
     scores = []
     with open(log_file) as f:
         for line in f:
-            score_ = re.search(r' ([^ ]+)=(.*?) ', line + ' ')
+            score_ = re.search(r' (score|bleu|ter|loss|cer|wer|bleu1)=(.*?) ', line + ' ')
 
             if score_:
                 scores.append(float(score_.group(2)))
@@ -73,7 +73,7 @@ def run(dir_, score=None):
         output = e.output.decode()
 
     scores = output.strip().split('\n')[-1] + ' '
-    score_ = re.search(r' ([^ ]+)=(.*?) ', scores)
+    score_ = re.search(r' (score|bleu|ter|loss|cer|wer|bleu1)=(.*?) ', scores)
 
     with open(log_file, 'a') as f:
         f.write(output)
