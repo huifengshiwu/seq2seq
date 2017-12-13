@@ -1,5 +1,5 @@
 label: "WMT14 Deep Decoder"
-description: "Baseline WMT14 fr->en model conditional decoder + deep output + average final state"
+description: "Baseline WMT14 model conditional decoder + deep output + average final state"
 
 cell_size: 1000
 attn_size: 1000

@@ -1,5 +1,5 @@
-label: "ENCDEC-MCGRU"
-description: "AMU 2017 Multi-Encoder Conditional GRU Method + 12k train set"
+label: "ENCDEC-MCGRU PLUS"
+description: "AMU 2017 Multi-Encoder Conditional GRU Method + 23k train set"
 
 cell_size: 1024
 attn_size: 2048
@@ -7,9 +7,9 @@ embedding_size: 512
 bidir: True
 cell_type: gru
 
-data_dir: data/AMU17
+data_dir: data/AMU17_plus
 max_len: 50
-model_dir: models/AMU17/m_cgru
+model_dir: models/AMU17/m_cgru_plus
 
 steps_per_checkpoint: 10000
 steps_per_eval: 10000

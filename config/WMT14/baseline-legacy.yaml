@@ -1,5 +1,5 @@
 label: "Baseline WMT14"
-description: "Baseline WMT14 fr->en model, exact same config as Bahdanau et al. 2014"
+description: "Baseline WMT14 model, exact same config as Bahdanau et al. 2014"
 
 cell_size: 1000
 attn_size: 1000
