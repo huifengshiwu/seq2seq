@@ -1,5 +1,5 @@
 label: 'IWSLT14 Baseline Vec'
-description: "IWSLT14 with pre-trained embeddings (fasttext wiki)"
+description: "IWSLT14 with pre-trained embeddings (fasttext wikipedia)"
 
 cell_size: 256
 attn_size: 256

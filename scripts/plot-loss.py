@@ -272,18 +272,17 @@ if args.txt:
         steps = [step for step in steps if step >= args.min_steps]
         steps = [step for step in steps if args.max_steps == 0 or step <= args.max_steps]
 
-        if args.stride:  # FIXME
-            args.stride = args.stride[0]
+        stride = args.stride[0] if args.stride else None  # FIXME
 
         if args.auto:
-            args.stride = int(math.ceil(len(steps) / cols))
+            stride = int(math.ceil(len(steps) / cols))
             args.max_values = cols
 
-        if args.stride:
+        if stride:
             if args.min_steps:  # we want to include the first value
-                steps = steps[::args.stride]
+                steps = steps[::stride]
             else:
-                steps = steps[args.stride - 1::args.stride]
+                steps = steps[stride - 1::stride]
 
         if args.max_values:
             steps = steps[:args.max_values]
