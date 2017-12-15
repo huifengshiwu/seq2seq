@@ -306,13 +306,13 @@ def tercom_statistics(hypotheses, references, case_sensitive=True, **kwargs):
     return total, stats
 
 name_mapping = {
-    'corpus_bleu': ['bleu'],
-    'corpus_ter': ['ter'],
-    'corpus_wer': ['wer'],
-    'corpus_bleu1': ['bleu1'],
-    'corpus_cer': ['cer'],
-    'corpus_scores': ['bleu', 'ter', 'wer', 'bleu1', 'cer'],
-    'corpus_scores_bleu': ['bleu', 'ter', 'wer', 'bleu1', 'cer'],
-    'corpus_scores_ter': ['ter', 'bleu', 'wer', 'bleu1', 'cer'],
-    'corpus_scores_wer': ['wer', 'bleu', 'ter', 'bleu1', 'cer']
+    'corpus_bleu': ['bleu', 'loss'],
+    'corpus_ter': ['ter', 'loss'],
+    'corpus_wer': ['wer', 'loss'],
+    'corpus_bleu1': ['bleu1', 'loss'],
+    'corpus_cer': ['cer', 'loss'],
+    'corpus_scores': ['bleu', 'ter', 'wer', 'bleu1', 'cer', 'loss'],
+    'corpus_scores_bleu': ['bleu', 'ter', 'wer', 'bleu1', 'cer', 'loss'],
+    'corpus_scores_ter': ['ter', 'bleu', 'wer', 'bleu1', 'cer', 'loss'],
+    'corpus_scores_wer': ['wer', 'bleu', 'ter', 'bleu1', 'cer', 'loss']
 }
