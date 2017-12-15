@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 data_dir=data/IWSLT14
 model_dir=models/IWSLT14
 train_script=scripts/train-moses.sh
