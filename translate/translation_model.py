@@ -14,6 +14,7 @@ from translate.seq2seq_model import Seq2SeqModel
 from subprocess import Popen, PIPE
 
 
+
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, name=None, ref_ext=None,
@@ -28,6 +29,8 @@ class TranslationModel:
             encoder_or_decoder.ext = encoder_or_decoder.ext or encoder_or_decoder.name
             self.character_level[encoder_or_decoder.ext] = encoder_or_decoder.character_level
             self.binary.append(encoder_or_decoder.get('binary', False))
+
+        self.encoders, self.decoders =  encoders, decoders
 
         self.char_output = decoders[0].character_level
 
@@ -629,6 +632,32 @@ class TranslationModel:
                                     sharded=False)
 
         sess.run(tf.global_variables_initializer())
+
+        # load pre-trained embeddings
+        for encoder_or_decoder, vocab in zip(self.encoders + self.decoders, self.vocabs):
+            if encoder_or_decoder.embedding_file:
+                utils.log('loading embeddings from: {}'.format(encoder_or_decoder.embedding_file))
+                embeddings = {}
+                with open(encoder_or_decoder.embedding_file) as embedding_file:
+                    for line in embedding_file:
+                        word, vector = line.split(' ', 1)
+                        if word in vocab.vocab:
+                            embeddings[word] = np.array(list(map(float, vector.split())))
+                # standardize (mean of 0, std of 0.01)
+                mean = sum(embeddings.values()) / len(embeddings)
+                std = np.sqrt(sum((value - mean)**2 for value in embeddings.values())) / (len(embeddings) - 1)
+                for key in embeddings:
+                    embeddings[key] = 0.01 * (embeddings[key] - mean) / std
+
+                # change TensorFlow variable's value
+                with tf.variable_scope(tf.get_variable_scope(), reuse=True):
+                    embedding_var = tf.get_variable('embedding_' + encoder_or_decoder.name)
+                    embedding_value = embedding_var.eval()
+                    for word, i in vocab.vocab.items():
+                        if word in embeddings:
+                            embedding_value[i] = embeddings[word]
+                    sess.run(embedding_var.assign(embedding_value))
+
         blacklist = ['dropout_keep_prob']
 
         if reset_learning_rate or reset:

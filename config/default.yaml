@@ -41,7 +41,7 @@ use_dropout: False
 layer_norm: False
 
 # initialization parameters
-weight_scale: null       # if null, initialize weights to TF defaults, otherwise to normal distribution with this stdev
+weight_scale: 0.1        # if null, initialize weights to TF defaults, otherwise to normal distribution with this stdev
 initializer: null        # if 'uniform' initialize uniformly between [-weight_scale, +weight_scale] instead
 orthogonal_init: False   # initialize recurrent connections with an orthogonal matrix
 

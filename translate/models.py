@@ -79,10 +79,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
         # inputs are token ids, which need to be mapped to vectors (embeddings)
         embedding_shape = [encoder.vocab_size, encoder.embedding_size]
 
-        if encoder.embedding_initializer == 'sqrt3':
-            initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
+        if encoder.initializer == 'uniform':
+            initializer = tf.random_uniform_initializer(-encoder.embedding_scale, encoder.embedding_scale)
         else:
-            initializer = None
+            initializer = tf.random_normal_initializer(encoder.embedding_scale)
 
         device = '/cpu:0' if encoder.embeddings_on_cpu else None
         with tf.device(device):  # embeddings can take a very large amount of memory, so
@@ -593,10 +593,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         decoder.cell_type = 'GRU'
 
     embedding_shape = [decoder.vocab_size, decoder.embedding_size]
-    if decoder.embedding_initializer == 'sqrt3':
-        initializer = tf.random_uniform_initializer(-math.sqrt(3), math.sqrt(3))
+    weight_scale = decoder.weight_scale or 0.01
+    if decoder.initializer == 'uniform':
+        initializer = tf.random_uniform_initializer(-weight_scale, weight_scale)
     else:
-        initializer = None
+        initializer = tf.random_normal_initializer(weight_scale)
 
     device = '/cpu:0' if decoder.embeddings_on_cpu else None
     with tf.device(device):
@@ -613,11 +614,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         embedded_input = tf.nn.embedding_lookup(embedding, input_)
 
         if decoder.use_dropout and decoder.word_keep_prob is not None:
-            noise_shape = [1, 1] if decoder.pervasive_dropout else [batch_size, 1]
+            noise_shape = [1, 1] if decoder.pervasive_dropout else [tf.shape(input_)[0], 1]
             embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.word_keep_prob, noise_shape=noise_shape)
         if decoder.use_dropout and decoder.embedding_keep_prob is not None:
             size = tf.shape(embedded_input)[1]
-            noise_shape = [1, size] if decoder.pervasive_dropout else [batch_size, size]
+            noise_shape = [1, size] if decoder.pervasive_dropout else [tf.shape(input_)[0], size]
             embedded_input = tf.nn.dropout(embedded_input, keep_prob=decoder.embedding_keep_prob,
                                            noise_shape=noise_shape)
 
@@ -864,11 +865,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
         predicted_symbol.set_shape([None])
         predicted_symbol = tf.stop_gradient(predicted_symbol)
-        samples = samples.write(time, predicted_symbol)
 
         input_ = embed(predicted_symbol)
         pos = update_pos(pos, predicted_symbol, encoder_input_length[align_encoder_id])
 
+        samples = samples.write(time, predicted_symbol)
         attns = attns.write(time, context)
         weights = weights.write(time, new_weights)
         states = states.write(time, state)
@@ -919,8 +920,6 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     parameters = dict(encoders=encoders, decoder=decoder, encoder_inputs=encoder_inputs,
                       feed_argmax=feed_argmax)
 
-    target_weights = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
-
     attention_states, encoder_state, encoder_input_length = multi_encoder(
         encoder_input_length=encoder_input_length, **parameters)
 
@@ -942,6 +941,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     reinforce_loss = sequence_loss(logits=outputs, targets=samples, weights=reinforce_weights,
                                    rewards=baseline_rewards)
 
+    target_weights = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
     xent_loss = sequence_loss(logits=outputs, targets=targets[:, 1:], weights=target_weights)
     losses = [xent_loss, reinforce_loss, baseline_loss_]
 
