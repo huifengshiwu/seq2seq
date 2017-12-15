@@ -22,7 +22,7 @@ steps_per_eval: 2000
 max_gradient_norm: 1.0
 batch_mode: standard
 read_ahead: 20
-max_steps: 100000
+max_steps: 200000
 
 encoders:
   - name: jsub.de

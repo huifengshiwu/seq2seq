@@ -36,16 +36,26 @@ scripts/prepare-data.py ${data_dir}/train.jsub concat ${data_dir} --subwords --b
 --vocab-size 0 --vocab-prefix vocab.jsub --mode vocab
 
 
-wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.de.gz -O ${data_dir}
-wget http://opus.nlpl.eu/download/TED2013/mono/TED2013.en.gz -O ${data_dir}
+wget http://opus.nlpl.eu/download/TED2013/mono/TED2013.en.gz -O ${data_dir}/TED2013.en.gz
+wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.de.gz -O ${data_dir}/OpenSubtitles2018.de.gz
+wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.en.gz -O ${data_dir}/OpenSubtitles2018.en.gz
 
-gunzip ${data_dir}/TED2013.en.gz --stdout | scripts/lowercase.perl > ${data_dir}/TED.en
-gunzip ${data_dir}/OpenSubtitles2018.de.gz --stdout  | scripts/lowercase.perl > ${data_dir}/OpenSubtitles.de
+function filter {
+filename=`mktemp`
+cat > ${filename} << EOF
+import sys
+lines = set(list(open('${data_dir}/dev.$1')) + list(open('${data_dir}/test.$1')))
+for line in sys.stdin:
+    if line not in lines:
+        sys.stdout.write(line)
+EOF
+python3 ${filename}
+rm ${filename}
+}
 
-python3 -c "lines = set(list(open('${data_dir}/dev.en')) + list(open('${data_dir}/test.en'))); print(''.join(line for line in open('${data_dir}/TED.en') if line not in lines))" > ${data_dir}/TED.filtered.en
-python3 -c "lines = set(list(open('${data_dir}/dev.de')) + list(open('${data_dir}/test.de'))); print(''.join(line for line in open('${data_dir}/OpenSubtitles.de') if line not in lines))" > ${data_dir}/OpenSubtitles.filtered.de
-mv ${data_dir}/TED.filtered.en ${data_dir}/TED.en
-mv ${data_dir}/OpenSubtitles.filtered.de ${data_dir}/OpenSubtitles.de
+gunzip ${data_dir}/TED2013.en.gz --stdout | scripts/lowercase.perl | filter en > ${data_dir}/TED.en
+gunzip ${data_dir}/OpenSubtitles2018.de.gz --stdout  | scripts/lowercase.perl | filter de > ${data_dir}/OpenSubtitles.de
+gunzip ${data_dir}/OpenSubtitles2018.en.gz --stdout  | scripts/lowercase.perl | filter en > ${data_dir}/OpenSubtitles.en
 
 scripts/apply_bpe.py -i ${data_dir}/TED.en -o ${data_dir}/TED.jsub.en -c ${data_dir}/bpe.joint.en
 scripts/apply_bpe.py -i ${data_dir}/OpenSubtitles.de -o ${data_dir}/OpenSubtitles.jsub.de -c ${data_dir}/bpe.joint.de
