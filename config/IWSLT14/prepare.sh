@@ -7,10 +7,9 @@ config/IWSLT14/prepare-mixer.sh
 mv prep/*.{en,de} ${data_dir}
 rename s/.de-en// ${data_dir}/*
 rename s/valid/dev/ ${data_dir}/*
-
-scripts/prepare-data.py ${data_dir}/train de en ${data_dir} --mode vocab --vocab-size 0 --min-count 3
-
 rm -rf prep orig
+
+scripts/prepare-data.py ${data_dir}/train de en ${data_dir} --mode vocab --vocab-size 30000
 
 cat ${data_dir}/train.{de,en} > ${data_dir}/train.concat
 scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.joint.en -s 30000
