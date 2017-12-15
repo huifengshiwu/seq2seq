@@ -79,10 +79,11 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
         # inputs are token ids, which need to be mapped to vectors (embeddings)
         embedding_shape = [encoder.vocab_size, encoder.embedding_size]
 
+        weight_scale = encoder.weight_scale or 0.01
         if encoder.initializer == 'uniform':
-            initializer = tf.random_uniform_initializer(-encoder.embedding_scale, encoder.embedding_scale)
+            initializer = tf.random_uniform_initializer(-weight_scale, weight_scale)
         else:
-            initializer = tf.random_normal_initializer(encoder.embedding_scale)
+            initializer = tf.random_normal_initializer(weight_scale)
 
         device = '/cpu:0' if encoder.embeddings_on_cpu else None
         with tf.device(device):  # embeddings can take a very large amount of memory, so
