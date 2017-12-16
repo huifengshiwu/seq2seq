@@ -1,5 +1,5 @@
 label: "Baseline WMT14"
-description: "Baseline WMT14 model with Adam + Both final states"
+description: "Baseline WMT14 model with Adam"
 
 cell_size: 1000
 attn_size: 1000
