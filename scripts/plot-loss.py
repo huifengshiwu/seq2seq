@@ -229,13 +229,13 @@ for step_multiplier, step_delta, log_file in zip(args.step_multiplier, args.step
         data['cer'].append(cer_scores)
 
 metric_labels = {
-    'bleu': 'BLEU',
-    'ter': 'TER',
+    'bleu': 'Dev BLEU',
+    'ter': 'Dev TER',
     'dev': 'Dev Loss',
     'train': 'Train Loss',
-    'cer': 'CER',
-    'wer': 'WER',
-    'bleu1': 'BLEU1'
+    'cer': 'Dev CER',
+    'wer': 'Dev WER',
+    'bleu1': 'Dev BLEU1'
 }
 
 def boldify(text):
@@ -390,17 +390,20 @@ else:
         label = ', '.join(metric_labels[name] for name in args.plot[1:])
         label = label.replace('Dev Loss, Train Loss', 'Dev/Train Loss')
         ax_right.set_ylabel(label)
-
-    for i, (name, values) in enumerate(data.items()):
+    
+    linestyles_ = []
+    for i, (name, values) in enumerate(sorted(data.items(), key=lambda p: args.plot.index(p[0]))):
         ax = axes[i]
         ax.set_prop_cycle(None)
         linestyle = linestyles[i]
+        linestyles_.append(linestyle)
 
         for values_ in values:
             values_ = [(step, value) for step, value in values_
                        if step >= args.min_steps and (args.max_steps == 0 or step <= args.max_steps)]
 
             ax.plot(*zip(*values_), linestyle=linestyle)
+    linestyles = linestyles_
 
     colors = [line.get_color() for line in ax_left.get_lines()]
 

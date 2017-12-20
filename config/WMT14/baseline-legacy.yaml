@@ -13,7 +13,7 @@ model_dir: models/WMT14/baseline_legacy
 
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
-score_function: corpus_bleu
+score_function: corpus_scores_bleu
 keep_best: 1
 max_to_keep: null
 

@@ -146,7 +146,8 @@ class TranslationModel:
     def decode_sentence(self, sentence_tuple, remove_unk=False):
         return next(self.decode_batch([sentence_tuple], remove_unk))
 
-    def decode_batch(self, sentence_tuples, batch_size, remove_unk=False, fix_edits=True, unk_replace=False):
+    def decode_batch(self, sentence_tuples, batch_size, remove_unk=False, fix_edits=True, unk_replace=False,
+                     align=False, reverse=False, output=None):
         if batch_size == 1:
             batches = ([sentence_tuple] for sentence_tuple in sentence_tuples)   # lazy
         else:
@@ -161,12 +162,14 @@ class TranslationModel:
             ]
             return token_ids
 
+        line_id = 0
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, unk_replace=unk_replace)
+            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, align=unk_replace or align)
             batch_token_ids = zip(*batch_token_ids)
 
             for sentence_id, (src_tokens, trg_token_ids) in enumerate(zip(batch, batch_token_ids)):
+                line_id += 1
                 trg_tokens = []
 
                 for trg_token_ids_, vocab in zip(trg_token_ids, self.trg_vocab):
@@ -177,6 +180,17 @@ class TranslationModel:
                     trg_tokens_ = [vocab.reverse[i] if i < len(vocab.reverse) else utils._UNK
                                    for i in trg_token_ids_]
                     trg_tokens.append(trg_tokens_)
+
+                if align:
+                    weights_ = batch_weights[sentence_id].squeeze()
+                    max_len_ = weights_.shape[1]
+                    src_tokens_ = src_tokens[0].split()[:max_len_ - 1] + [utils._EOS]
+                    src_tokens_ = [token if token in self.src_vocab[0].vocab else utils._UNK for token in src_tokens_]
+                    trg_tokens_ = trg_tokens[0][:weights_.shape[0] - 1] + [utils._EOS]
+
+                    weights_ = weights_[:len(trg_tokens_),:len(src_tokens_)]
+                    output_file = output and '{}.{}.pdf'.format(output, line_id)
+                    utils.heatmap(src_tokens_, trg_tokens_, weights_, reverse=reverse, output_file=output_file)
 
                 if unk_replace:
                     weights = batch_weights[sentence_id]
@@ -213,7 +227,7 @@ class TranslationModel:
                 yield hypothesis, raw_hypothesis
 
 
-    def align(self, output=None, align_encoder_id=0, **kwargs):
+    def align(self, output=None, align_encoder_id=0, reverse=False, **kwargs):
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
 
@@ -244,11 +258,12 @@ class TranslationModel:
                 src_tokens = lines[align_encoder_id].split()[:max_len - 1] + [utils._EOS]
             trg_tokens = trg_tokens[:weights.shape[0] - 1] + [utils._EOS]
 
-            output_file = '{}.{}.svg'.format(output, line_id + 1) if output is not None else None
+            output_file = output and '{}.{}.pdf'.format(output, line_id + 1)
 
-            utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file)
+            utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file, reverse=reverse)
 
-    def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, unk_replace=False, **kwargs):
+    def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, unk_replace=False,
+               align=False, reverse=False, **kwargs):
         utils.log('starting decoding')
 
         # empty `test` means that we read from standard input, which is not possible with multiple encoders
@@ -271,7 +286,8 @@ class TranslationModel:
                 batch_size = self.batch_size
                 lines = list(lines)
 
-            hypothesis_iter = self.decode_batch(lines, batch_size, remove_unk=remove_unk, unk_replace=unk_replace)
+            hypothesis_iter = self.decode_batch(lines, batch_size, remove_unk=remove_unk, unk_replace=unk_replace,
+                                                align=align, reverse=reverse, output=output)
 
             for hypothesis, raw in hypothesis_iter:
                 if raw_output:

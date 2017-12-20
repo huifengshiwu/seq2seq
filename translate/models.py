@@ -1,7 +1,8 @@
 import tensorflow as tf
 import math
 from tensorflow.contrib.rnn import BasicLSTMCell, RNNCell, DropoutWrapper, MultiRNNCell
-from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell, DropoutGRUCell
+from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell, DropoutGRUCell, PLSTM
+from translate.rnn import get_state_size
 from translate import utils, beam_search
 from translate.conv_lstm import BasicConvLSTMCell
 
@@ -69,42 +70,50 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
     """
     encoder_states = []
     encoder_outputs = []
+    new_encoder_input_length = []
 
-    # create embeddings in the global scope (allows sharing between encoder and decoder)
-    embedding_variables = []
-    for encoder in encoders:
-        if encoder.binary:
-            embedding_variables.append(None)
-            continue
-        # inputs are token ids, which need to be mapped to vectors (embeddings)
-        embedding_shape = [encoder.vocab_size, encoder.embedding_size]
+    for i, encoder in enumerate(encoders):
 
+        # create embeddings in the global scope (allows sharing between encoder and decoder)
         weight_scale = encoder.weight_scale or 0.01
         if encoder.initializer == 'uniform':
             initializer = tf.random_uniform_initializer(minval=-weight_scale, maxval=weight_scale)
         else:
             initializer = tf.random_normal_initializer(stddev=weight_scale)
-
         device = '/cpu:0' if encoder.embeddings_on_cpu else None
+
         with tf.device(device):  # embeddings can take a very large amount of memory, so
             # storing them in GPU memory can be impractical
-            embedding = get_variable('embedding_{}'.format(encoder.name), shape=embedding_shape,
-                                     initializer=initializer)
-        embedding_variables.append(embedding)
+            if encoder.binary:
+                embeddings = None  # inputs are token ids, which need to be mapped to vectors (embeddings)
+            else:
+                embedding_shape = [encoder.vocab_size, encoder.embedding_size]
+                embeddings = get_variable('embedding_{}'.format(encoder.name), shape=embedding_shape,
+                                          initializer=initializer)
+            if encoder.pos_embedding_size:
+                pos_embedding_shape = [encoder.max_len + 1, encoder.pos_embedding_size]
+                pos_embeddings = get_variable('pos_embedding_{}'.format(encoder.name), shape=pos_embedding_shape,
+                                              initializer=initializer)
+            else:
+                pos_embeddings = None
 
-    new_encoder_input_length = []
-
-    for i, encoder in enumerate(encoders):
         if encoder.use_lstm is False:
             encoder.cell_type = 'GRU'
 
+        cell_output_size, cell_state_size = get_state_size(encoder.cell_type, encoder.cell_size,
+                                                           encoder.lstm_proj_size)
+
         with tf.variable_scope('encoder_{}'.format(encoder.name)):
             encoder_inputs_ = encoder_inputs[i]
+            initial_inputs = encoder_inputs_
             encoder_input_length_ = encoder_input_length[i]
 
             def get_cell(input_size=None, reuse=False):
                 if encoder.cell_type.lower() == 'lstm':
                     cell = CellWrapper(BasicLSTMCell(encoder.cell_size, reuse=reuse))
+                elif encoder.cell_type.lower() == 'plstm':
+                    cell = PLSTM(encoder.cell_size, reuse=reuse, fact_size=encoder.lstm_fact_size,
+                                 proj_size=encoder.lstm_proj_size)
                 elif encoder.cell_type.lower() == 'dropoutgru':
                     cell = DropoutGRUCell(encoder.cell_size, reuse=reuse, layer_norm=encoder.layer_norm,
                                           input_size=input_size, input_keep_prob=encoder.rnn_input_keep_prob,
@@ -120,16 +129,19 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                                           dtype=tf.float32, input_size=input_size)
                 return cell
 
-            embedding = embedding_variables[i]
-
             batch_size = tf.shape(encoder_inputs_)[0]
             time_steps = tf.shape(encoder_inputs_)[1]
 
-            if embedding is not None:
+            if embeddings is not None:
                 flat_inputs = tf.reshape(encoder_inputs_, [tf.multiply(batch_size, time_steps)])
-                flat_inputs = tf.nn.embedding_lookup(embedding, flat_inputs)
+                flat_inputs = tf.nn.embedding_lookup(embeddings, flat_inputs)
                 encoder_inputs_ = tf.reshape(flat_inputs,
                                              tf.stack([batch_size, time_steps, flat_inputs.get_shape()[1].value]))
+            if pos_embeddings is not None:
+                pos_inputs_ = tf.range(time_steps, dtype=tf.int32)
+                pos_inputs_ = tf.nn.embedding_lookup(pos_embeddings, pos_inputs_)
+                pos_inputs_ = tf.tile(tf.expand_dims(pos_inputs_, axis=0), [batch_size, 1, 1])
+                encoder_inputs_ = tf.concat([encoder_inputs_, pos_inputs_], axis=2)
 
             if other_inputs is not None:
                 encoder_inputs_ = tf.concat([encoder_inputs_, other_inputs], axis=2)
@@ -170,7 +182,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                                            [filter_height, filter_width, in_channels, out_channels])
                     encoder_inputs_ = tf.nn.conv2d(encoder_inputs_, filter_, strides, padding='SAME')
 
-                    if encoder.conv_activation.lower == 'relu':
+                    if encoder.conv_activation is not None and encoder.conv_activation.lower() == 'relu':
                         encoder_inputs_ = tf.nn.relu(encoder_inputs_)
                     if encoder.batch_norm:
                         encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_,
@@ -196,7 +208,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 if encoder.binary:
                     raise NotImplementedError
 
-                pad = tf.nn.embedding_lookup(embedding, utils.BOS_ID)
+                pad = tf.nn.embedding_lookup(embeddings, utils.BOS_ID)
                 pad = tf.expand_dims(tf.expand_dims(pad, axis=0), axis=1)
                 pad = tf.tile(pad, [batch_size, 1, 1])
 
@@ -259,20 +271,19 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
             )
 
             input_size = encoder_inputs_.get_shape()[2].value
-            state_size = (encoder.cell_size * 2 if encoder.cell_type.lower() == 'lstm' else encoder.cell_size)
 
             def get_initial_state(name='initial_state'):
                 if encoder.train_initial_states:
-                    initial_state = get_variable(name, initializer=tf.zeros(state_size))
+                    initial_state = get_variable(name, initializer=tf.zeros(cell_state_size))
                     return tf.tile(tf.expand_dims(initial_state, axis=0), [batch_size, 1])
                 else:
                     return None
 
             if encoder.bidir:
                 rnn = lambda reuse: stack_bidirectional_dynamic_rnn(
-                    cells_fw=[get_cell(input_size if j == 0 else 2 * encoder.cell_size, reuse=reuse)
+                    cells_fw=[get_cell(input_size if j == 0 else 2 * cell_output_size, reuse=reuse)
                               for j in range(encoder.layers)],
-                    cells_bw=[get_cell(input_size if j == 0 else 2 * encoder.cell_size, reuse=reuse)
+                    cells_bw=[get_cell(input_size if j == 0 else 2 * cell_output_size, reuse=reuse)
                               for j in range(encoder.layers)],
                     initial_states_fw=[get_initial_state('initial_state_fw')] * encoder.layers,
                     initial_states_bw=[get_initial_state('initial_state_bw')] * encoder.layers,
@@ -290,7 +301,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     raise NotImplementedError
 
                 if encoder.layers > 1:
-                    cell = MultiRNNCell([get_cell(input_size if j == 0 else encoder.cell_size)
+                    cell = MultiRNNCell([get_cell(input_size if j == 0 else cell_output_size)
                                          for j in range(encoder.layers)])
                     initial_state = (get_initial_state(),) * encoder.layers
                 else:
@@ -305,10 +316,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 for stride in encoder.time_pooling[:encoder.layers - 1]:
                     encoder_input_length_ = (encoder_input_length_ + stride - 1) // stride  # rounding up
 
-            last_backward = encoder_outputs_[:, 0, encoder.cell_size:]
+            last_backward = encoder_outputs_[:, 0, cell_output_size:]
             indices = tf.stack([tf.range(batch_size), encoder_input_length_ - 1], axis=1)
-            last_forward = tf.gather_nd(encoder_outputs_[:, :, :encoder.cell_size], indices)
-            last_forward.set_shape([None, encoder.cell_size])
+            last_forward = tf.gather_nd(encoder_outputs_[:, :, :cell_output_size], indices)
+            last_forward.set_shape([None, cell_output_size])
 
             if encoder.final_state == 'concat_last': # concats last states of all backward layers (full LSTM states)
                 encoder_state_ = tf.concat(encoder_states_, axis=1)
@@ -322,15 +333,21 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 encoder_state_ = tf.reduce_sum(mask * encoder_inputs_, axis=1) / tf.reduce_sum(mask, axis=1)
             elif encoder.bidir and encoder.final_state == 'last_both':
                 encoder_state_ = tf.concat([last_forward, last_backward], axis=1)
+            elif encoder.final_state == 'none':
+                encoder_state_ = tf.zeros(shape=[batch_size, 0])
             elif encoder.bidir and not encoder.final_state == 'last_forward':   # last backward hidden state
                 encoder_state_ = last_backward
             else:  # last forward hidden state
                 encoder_state_ = last_forward
 
             if encoder.bidir and encoder.bidir_projection:
-                encoder_outputs_ = dense(encoder_outputs_, encoder.cell_size, use_bias=False, name='bidir_projection')
+                encoder_outputs_ = dense(encoder_outputs_, cell_output_size, use_bias=False, name='bidir_projection')
 
-            encoder_outputs.append(encoder_outputs_)
+            if encoder.attend_inputs:
+                encoder_outputs.append(encoder_inputs_)
+            else:
+                encoder_outputs.append(encoder_outputs_)
+
             encoder_states.append(encoder_state_)
             new_encoder_input_length.append(encoder_input_length_)
 
@@ -411,12 +428,22 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
                                attn_keep_prob=encoder.attn_keep_prob, pervasive_dropout=encoder.pervasive_dropout,
                                layer_norm=encoder.layer_norm, mult_attn=encoder.mult_attn, **kwargs)
 
-        e -= tf.reduce_max(e, axis=1, keep_dims=True)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
 
-        T = encoder.attn_temperature or 1.0
-        exp = tf.exp(e / T) * mask
-        weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
+        e *= mask
+
+        if encoder.attn_norm_fun == 'none':
+            weights = e
+        elif encoder.attn_norm_fun == 'sigmoid':
+            weights = tf.nn.sigmoid(e)
+        elif encoder.attn_norm_fun == 'max':
+            weights = tf.one_hot(tf.argmax(e, -1), depth=tf.shape(e)[1])
+        else:
+            e -= tf.reduce_max(e, axis=1, keep_dims=True)
+            T = encoder.attn_temperature or 1.0
+            exp = tf.exp(e / T) * mask
+            weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
+
         weighted_average = tf.reduce_sum(tf.expand_dims(weights, 2) * hidden_states, axis=1)
 
         return weighted_average, weights
@@ -588,7 +615,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
       outputs of the decoder as a tensor of shape (batch_size, output_length, decoder_cell_size)
       attention weights as a tensor of shape (output_length, encoders, batch_size, input_length)
     """
-    assert not decoder.pred_maxout_layer or decoder.cell_size % 2 == 0, 'cell size must be a multiple of 2'
+
+    cell_output_size, cell_state_size = get_state_size(decoder.cell_type, decoder.cell_size,
+                                                       decoder.lstm_proj_size, decoder.layers)
+
+    assert not decoder.pred_maxout_layer or cell_output_size % 2 == 0, 'cell size must be a multiple of 2'
 
     if decoder.use_lstm is False:
         decoder.cell_type = 'GRU'
@@ -629,10 +660,13 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         cells = []
 
         for j in range(decoder.layers):
-            input_size_ = input_size if j == 0 else decoder.cell_size
+            input_size_ = input_size if j == 0 else cell_output_size
 
             if decoder.cell_type.lower() == 'lstm':
                 cell = CellWrapper(BasicLSTMCell(decoder.cell_size, reuse=reuse))
+            elif decoder.cell_type.lower() == 'plstm':
+                cell = PLSTM(decoder.cell_size, reuse=reuse, fact_size=decoder.lstm_fact_size,
+                             proj_size=decoder.lstm_proj_size)
             elif decoder.cell_type.lower() == 'dropoutgru':
                 cell = DropoutGRUCell(decoder.cell_size, reuse=reuse, layer_norm=decoder.layer_norm,
                                       input_size=input_size_, input_keep_prob=decoder.rnn_input_keep_prob,
@@ -713,7 +747,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
     def generate(state, input_, context):
         if decoder.pred_use_lstm_state is False:  # for back-compatibility
-            state = state[:,-decoder.cell_size:]
+             state = state[:,-cell_output_size:]
 
         projection_input = [state, context]
         if decoder.use_previous_word:
@@ -735,7 +769,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                 output_ = tf.nn.dropout(output_, keep_prob=decoder.deep_layer_keep_prob, noise_shape=noise_shape)
         else:
             if decoder.pred_maxout_layer:
-                maxout_size = decoder.maxout_size or decoder.cell_size
+                maxout_size = decoder.maxout_size or cell_output_size
                 output_ = dense(output_, maxout_size, use_bias=True, name='maxout')
                 if decoder.old_maxout:  # for back-compatibility with old models
                     output_ = tf.nn.pool(tf.expand_dims(output_, axis=2), window_shape=[2], pooling_type='MAX',
@@ -757,24 +791,23 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             output_ = dense(output_, decoder.vocab_size, use_bias=True, name='softmax1')
         return output_
 
-    state_size = (decoder.cell_size * 2 if decoder.cell_type.lower() == 'lstm' else decoder.cell_size) * decoder.layers
-
     if decoder.use_dropout:
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope(scope_name):
         if decoder.layer_norm:
-            initial_state = dense(initial_state, state_size, use_bias=False, name='initial_state_projection')
+            initial_state = dense(initial_state, cell_state_size, use_bias=False, name='initial_state_projection')
             initial_state = tf.contrib.layers.layer_norm(initial_state, activation_fn=tf.nn.tanh,
                                                          scope='initial_state_layer_norm')
         else:
-            initial_state = dense(initial_state, state_size, use_bias=True, name='initial_state_projection',
+            initial_state = dense(initial_state, cell_state_size, use_bias=True, name='initial_state_projection',
                                   activation=tf.nn.tanh)
 
     if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
         initial_output = initial_state
     else:
-        initial_output = initial_state[:, -decoder.cell_size:]
+        # Last layer's state is the right-most part. Output is the left-most part of an LSTM's state.
+        initial_output = initial_state[:, -cell_output_size:]
 
     time = tf.constant(0, dtype=tf.int32, name='time')
     outputs = tf.TensorArray(dtype=tf.float32, size=time_steps)
@@ -796,7 +829,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
     def get_logits(state, ids, time):  # for beam-search decoding
         with tf.variable_scope('decoder_{}'.format(decoder.name)):
-            state, context, pos, prev_weights = tf.split(state, [state_size, context_size, 1, -1], axis=1)
+            state, context, pos, prev_weights = tf.split(state, [cell_state_size, context_size, 1, -1], axis=1)
             input_ = embed(ids)
 
             pos = tf.squeeze(pos, axis=1)
@@ -807,9 +840,10 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
                 output = state
             else:
-                # output is always the right-most part of state. However, this only works at test time,
-                # because different dropout operations can be used on state and output.
-                output = state[:, -decoder.cell_size:]
+                # Output is always the right-most part of the state (even with multi-layer RNNs)
+                # However, this only works at test time, because different dropout operations can be used
+                # on state and output.
+                output = state[:, -cell_output_size:]
 
             if decoder.conditional_rnn:
                 with tf.variable_scope('conditional_1'):
@@ -984,7 +1018,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
     chaining_loss = sequence_loss(logits=outputs, targets=encoder_inputs[0], weights=input_weights[0])
 
-    if decoder.cell_type.lower() == 'lstm':
+    if 'lstm' in decoder.cell_type.lower():
         size = states.get_shape()[2].value
         decoder_outputs = states[:, :, size // 2:]
     else:

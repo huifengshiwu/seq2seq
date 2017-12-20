@@ -234,7 +234,7 @@ class Seq2SeqModel(object):
         res = tf.get_default_session().run(output_feed, input_feed)
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
-    def greedy_decoding(self, token_ids, unk_replace=False):
+    def greedy_decoding(self, token_ids, align=False):
         for model in self.models:
             model.dropout_off.run()
 
@@ -255,7 +255,7 @@ class Seq2SeqModel(object):
                 input_feed[model.encoder_input_length[i]] = input_length[i]
 
         output_feed = {'outputs': self.beam_outputs}
-        if unk_replace:
+        if align:
             output_feed['weights'] = self.attention_weights
 
         res = tf.get_default_session().run(output_feed, input_feed)

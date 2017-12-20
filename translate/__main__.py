@@ -67,6 +67,7 @@ parser.add_argument('--attn-temperature', type=float, help='temperature of the a
 parser.add_argument('--align-encoder-id', type=int, default=0, help='id of the encoder whose attention outputs we are interested in (only useful in the multi-encoder setting)')
 parser.add_argument('--tf-seed', type=int)
 parser.add_argument('--seed', type=int)
+parser.add_argument('--reverse', action='store_true')
 
 def main(args=None):
     args = parser.parse_args(args)
@@ -271,19 +272,26 @@ def main(args=None):
             # loads last checkpoint, unless `reset` is true
             model.initialize(**config)
 
-        if args.save:
-            model.save()
-        elif args.decode is not None:
-            model.decode(**config)
-        elif args.eval is not None:
-            model.evaluate(on_dev=False, **config)
-        elif args.align is not None:
-            model.align(**config)
-        elif args.train:
-            try:
+        if config.output is not None:
+            dirname = os.path.dirname(config.output)
+            if dirname:
+                os.makedirs(dirname, exist_ok=True)
+
+        try:
+            if args.save:
+                model.save()
+            elif args.decode is not None:
+                if config.align is not None:
+                    config.align = True
+                model.decode(**config)
+            elif args.eval is not None:
+                model.evaluate(on_dev=False, **config)
+            elif args.align is not None:
+                model.align(**config)
+            elif args.train:
                 model.train(**config)
-            except KeyboardInterrupt:
-                sys.exit()
+        except KeyboardInterrupt:
+            sys.exit()
 
 
 if __name__ == '__main__':

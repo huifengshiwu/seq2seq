@@ -380,7 +380,6 @@ def get_batch_iterator(paths, extensions, vocabs, batch_size, max_size=None, cha
                                        shuffle=shuffle, mode=mode, crash_test=crash_test)
 
     # FIXME: crash test only for first shard
-
     with open(paths[-1]) as f:   # count lines
         line_count = sum(1 for _ in f)
         debug('total line count: {}'.format(line_count))
@@ -535,7 +534,7 @@ def debug(msg): log(msg, level=logging.DEBUG)
 def warn(msg): log(msg, level=logging.WARN)
 
 
-def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
+def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None, reverse=False):
     """
     Draw a heatmap showing the alignment between two sequences.
 
@@ -546,10 +545,25 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
     """
     from matplotlib import pyplot as plt
 
-    weights *= 10
+    def prettify(token):
+        token_mapping = {
+            '&quot;': '"',
+            '&apos;': '\'',
+            '&amp;': '&',
+            '@@': '_'
+        }
+        for x, y in token_mapping.items():
+            token = token.replace(x, y)
+        return token
 
     xlabels = xlabels or []
     ylabels = ylabels or []
+    xlabels = list(map(prettify, xlabels))
+    ylabels = list(map(prettify, ylabels))
+
+    if reverse:
+        xlabels, ylabels = ylabels, xlabels
+        weights = weights.T
 
     fig, ax = plt.subplots()
 
@@ -569,12 +583,14 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
     ax.set_yticklabels(ylabels, minor=False)
     ax.tick_params(axis='both', which='both', length=0)
 
-    plt.xticks(rotation=90, fontsize=20)
+    if not reverse:
+        plt.xticks(rotation=90)
+
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
     plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0)
-    # ax.set_aspect('equal')
+    ax.set_aspect('equal')
     ax.grid(True)
 
     xsize = max(2.0 + len(xlabels) / 3, 8.0)
@@ -584,7 +600,7 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None):
     if output_file is None:
         plt.show()
     else:
-        plt.savefig(output_file)
+        plt.savefig(output_file, bbox_inches='tight')
 
 
 def alignment_to_text(xlabels=None, ylabels=None, weights=None, output_file=None):

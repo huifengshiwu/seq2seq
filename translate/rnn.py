@@ -253,3 +253,60 @@ class GRUCell(tf.nn.rnn_cell.RNNCell):
 
         new_h = u * state + (1 - u) * c
         return new_h, new_h
+
+
+class PLSTM(tf.nn.rnn_cell.RNNCell):
+    """
+    Implementation of Projection-LSTM and Factorized-LSTM (https://arxiv.org/abs/1703.10722)
+    """
+    def __init__(self, num_units, forget_bias=1.0, activation=None, reuse=None, fact_size=None, proj_size=None):
+        super(PLSTM, self).__init__(_reuse=reuse)
+        self._num_units = num_units
+        self._forget_bias = forget_bias
+        self._activation = activation or tf.tanh
+        self._fact_size = fact_size
+        self._proj_size = proj_size
+
+    @property
+    def state_size(self):
+        if self._proj_size is not None:
+            return self._num_units + self._proj_size
+        else:
+            return 2 * self._num_units
+
+    @property
+    def output_size(self):
+        if self._proj_size is not None:
+            return self._proj_size
+        else:
+            return self._num_units
+
+    def call(self, inputs, state):
+        sigmoid = tf.sigmoid
+        size = [self.state_size - self.output_size, self.output_size]
+        c, h = tf.split(value=state, num_or_size_splits=size, axis=1)
+
+        T = tf.concat([inputs, h], axis=1)
+        if self._fact_size is not None:
+            T = tf.layers.dense(T, self._fact_size, use_bias=False, name='factorization')
+        T = tf.layers.dense(T, 4 * self._num_units, use_bias=True)
+
+        # i = input_gate, j = new_input, f = forget_gate, o = output_gate
+        i, j, f, o = tf.split(T, num_or_size_splits=4, axis=1)
+        new_c = c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j)
+
+        new_h = self._activation(new_c) * sigmoid(o)
+
+        if self._proj_size is not None:
+            new_h = tf.layers.dense(new_h, self._proj_size, use_bias=False, name='projection')
+
+        new_state = tf.concat([new_c, new_h], 1)
+        return new_h, new_state
+
+def get_state_size(cell_type, cell_size, proj_size=None, layers=1):
+    if cell_type.lower() == 'plstm' and proj_size is not None:
+        return proj_size, (proj_size + cell_size) * layers
+    elif cell_type.lower() in ('lstm', 'plstm'):
+        return cell_size, cell_size * 2 * layers
+    else:
+        return cell_size, cell_size * layers

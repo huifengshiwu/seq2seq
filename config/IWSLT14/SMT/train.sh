@@ -16,3 +16,4 @@ cat ${data_dir}/{train,TED}.jsub.en > ${data_dir}/train+TED.jsub.en
 ${train_script} ${model_dir}/SMT_LM_subwords ${data_dir} train.jsub dev.jsub de en train+TED.jsub 3
 
 ${train_script} ${model_dir}/SMT_huge_LM ${data_dir} train dev de en OpenSubtitles 5
+

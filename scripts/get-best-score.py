@@ -77,7 +77,7 @@ def print_scores(log_file, time=False, label=None):
         step, best = max(scores.items(), key=lambda p: key(p[1]))
 
         if 'score' in best:
-            missing_key = next(k for k in ['bleu', 'ter', 'wer', 'cer', 'bleu1'] if k not in best)
+            missing_key = next(k for k in ['bleu', 'ter', 'wer', 'cer', 'bleu1', 'loss'] if k not in best)
             best[missing_key] = best.pop('score')
 
         keys = [args.score, 'bleu', 'ter', 'wer', 'cer', 'bleu1', 'loss', 'penalty', 'ratio']
