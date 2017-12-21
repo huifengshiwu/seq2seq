@@ -55,6 +55,7 @@ class Seq2SeqModel(object):
 
         self.feed_previous = tf.constant(feed_previous, dtype=tf.float32)
         self.feed_argmax = tf.constant(True, dtype=tf.bool)  # feed with argmax or sample from softmax
+        self.training = tf.placeholder(dtype=tf.bool, shape=())
 
         self.encoder_inputs = []
         self.encoder_input_length = []
@@ -83,7 +84,7 @@ class Seq2SeqModel(object):
 
         tensors = architecture(encoders, decoders, self.encoder_inputs, self.targets, self.feed_previous,
                                encoder_input_length=self.encoder_input_length, feed_argmax=self.feed_argmax,
-                               rewards=self.rewards, use_baseline=use_baseline, **kwargs)
+                               rewards=self.rewards, use_baseline=use_baseline, training=self.training, **kwargs)
 
         (self.losses, self.outputs, self.encoder_state, self.attention_states, self.attention_weights,
          self.samples, self.beam_fun, self.initial_data) = tensors
@@ -154,8 +155,10 @@ class Seq2SeqModel(object):
 
         update_ops = []
         for opt in opts:
+            update_ops_ = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.variable_scope('gradients' if self.name is None else 'gradients_{}'.format(self.name)):
-                update_op = opt.apply_gradients(list(zip(gradients, params)), global_step=global_step)
+                with tf.control_dependencies(update_ops_):  # update batch_norm's moving averages
+                    update_op = opt.apply_gradients(list(zip(gradients, params)), global_step=global_step)
 
             update_ops.append(update_op)
 
@@ -166,7 +169,7 @@ class Seq2SeqModel(object):
         # self.dropout_on.run()
 
         encoder_inputs, targets, input_length = self.get_batch(data)
-        input_feed = {self.targets: targets, self.feed_argmax: False, self.feed_previous: 1.0}
+        input_feed = {self.targets: targets, self.feed_argmax: False, self.feed_previous: 1.0, self.training: True}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
@@ -219,7 +222,7 @@ class Seq2SeqModel(object):
             self.dropout_off.run()
 
         encoder_inputs, targets, input_length = self.get_batch(data)
-        input_feed = {self.targets: targets}
+        input_feed = {self.targets: targets, self.training: True}
 
         for i in range(len(self.encoders)):
             input_feed[self.encoder_inputs[i]] = encoder_inputs[i]
@@ -250,6 +253,7 @@ class Seq2SeqModel(object):
         for model in self.models:
             input_feed[model.targets] = targets
             input_feed[model.feed_previous] = 1.0
+            input_feed[model.training] = False
             for i in range(len(model.encoders)):
                 input_feed[model.encoder_inputs[i]] = encoder_inputs[i]
                 input_feed[model.encoder_input_length[i]] = input_length[i]

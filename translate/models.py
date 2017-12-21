@@ -53,7 +53,7 @@ class CellWrapper(RNNCell):
         return new_h, tf.concat(new_state, 1)
 
 
-def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=None, **kwargs):
+def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=None, training=True, **kwargs):
     """
     Build multiple encoders according to the configuration in `encoders`, reading from `encoder_inputs`.
     The result is a list of the outputs produced by those encoders (for each time-step), and their final state.
@@ -163,6 +163,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     else:
                         activation = tf.tanh
 
+                    if encoder.batch_norm and activation is tf.nn.relu:
+                        encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_, training=training,
+                                                                        name='input_batch_norm_{}'.format(j + 1))
+
                     encoder_inputs_ = dense(encoder_inputs_, layer_size, activation=activation, use_bias=True,
                                             name='layer_{}'.format(j))
                     if encoder.use_dropout:
@@ -183,10 +187,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     encoder_inputs_ = tf.nn.conv2d(encoder_inputs_, filter_, strides, padding='SAME')
 
                     if encoder.conv_activation is not None and encoder.conv_activation.lower() == 'relu':
+                        if encoder.batch_norm:   # do batch norm only before relu
+                            encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_, training=training,
+                                                                            name='conv_batch_norm_{}'.format(k))
                         encoder_inputs_ = tf.nn.relu(encoder_inputs_)
-                    if encoder.batch_norm:
-                        encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_,
-                                                                        name='batch_norm_{}'.format(k))
 
                     encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / strides[1]))
 
@@ -267,7 +271,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 dtype=tf.float32, parallel_iterations=encoder.parallel_iterations,
                 inter_layers=encoder.inter_layers, inter_layer_activation=encoder.inter_layer_activation,
                 batch_norm=encoder.batch_norm, inter_layer_keep_prob=inter_layer_keep_prob,
-                pervasive_dropout=encoder.pervasive_dropout
+                pervasive_dropout=encoder.pervasive_dropout, training=training
             )
 
             input_size = encoder_inputs_.get_shape()[2].value
@@ -591,7 +595,7 @@ def multi_attention(state, hidden_states, encoders, encoder_input_length, pos=No
 
 
 def attention_decoder(decoder_inputs, initial_state, attention_states, encoders, decoder, encoder_input_length,
-                      feed_previous=0.0, align_encoder_id=0, feed_argmax=True, **kwargs):
+                      feed_previous=0.0, align_encoder_id=0, feed_argmax=True, training=True, **kwargs):
     """
     :param decoder_inputs: int32 tensor of shape (batch_size, output_length)
     :param initial_state: initial state of the decoder (usually the final state of the encoder),
@@ -942,7 +946,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
 
 def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, align_encoder_id=0,
-                    encoder_input_length=None, feed_argmax=True, rewards=None, use_baseline=True, **kwargs):
+                    encoder_input_length=None, feed_argmax=True, rewards=None, use_baseline=True,
+                    training=True, **kwargs):
     decoder = decoders[0]
     targets = targets[0]  # single decoder
 
@@ -953,7 +958,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
             encoder_input_length.append(tf.to_int32(tf.reduce_sum(weights, axis=1)))
 
     parameters = dict(encoders=encoders, decoder=decoder, encoder_inputs=encoder_inputs,
-                      feed_argmax=feed_argmax)
+                      feed_argmax=feed_argmax, training=training)
 
     attention_states, encoder_state, encoder_input_length = multi_encoder(
         encoder_input_length=encoder_input_length, **parameters)
@@ -985,7 +990,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
 
 def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
                             chaining_strategy=None, align_encoder_id=0, chaining_non_linearity=False,
-                            chaining_loss_ratio=1.0, chaining_stop_gradient=False, **kwargs):
+                            chaining_loss_ratio=1.0, chaining_stop_gradient=False, training=True, **kwargs):
     decoder = decoders[0]
     targets = targets[0]  # single decoder
 
@@ -1000,7 +1005,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
     target_weights = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
 
-    parameters = dict(encoders=encoders[1:], decoder=encoders[0])
+    parameters = dict(encoders=encoders[1:], decoder=encoders[0], training=training)
 
     attention_states, encoder_state, encoder_input_length[1:] = multi_encoder(
         encoder_inputs[1:], encoder_input_length=encoder_input_length[1:], **parameters)
@@ -1035,7 +1040,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
         other_inputs = tf.stop_gradient(other_inputs)
 
     parameters = dict(encoders=encoders[:1], decoder=decoder, encoder_inputs=encoder_inputs[:1],
-                      other_inputs=other_inputs)
+                      other_inputs=other_inputs, training=training)
 
     attention_states, encoder_state, encoder_input_length[:1] = multi_encoder(
         encoder_input_length=encoder_input_length[:1], **parameters)
