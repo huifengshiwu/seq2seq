@@ -75,14 +75,16 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
     for i, encoder in enumerate(encoders):
 
         # create embeddings in the global scope (allows sharing between encoder and decoder)
-        weight_scale = encoder.weight_scale or 0.01
-        if encoder.initializer == 'uniform':
+        weight_scale = encoder.embedding_weight_scale or encoder.weight_scale
+        if weight_scale is None:
+            initializer = None   # FIXME
+        elif encoder.embedding_initializer == 'uniform' or (encoder.embedding_initializer is None
+                                                            and encoder.initializer == 'uniform'):
             initializer = tf.random_uniform_initializer(minval=-weight_scale, maxval=weight_scale)
         else:
             initializer = tf.random_normal_initializer(stddev=weight_scale)
-        device = '/cpu:0' if encoder.embeddings_on_cpu else None
 
-        with tf.device(device):  # embeddings can take a very large amount of memory, so
+        with tf.device('/cpu:0'):  # embeddings can take a very large amount of memory, so
             # storing them in GPU memory can be impractical
             if encoder.binary:
                 embeddings = None  # inputs are token ids, which need to be mapped to vectors (embeddings)
@@ -163,7 +165,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                     else:
                         activation = tf.tanh
 
-                    if encoder.batch_norm and activation is tf.nn.relu:
+                    if encoder.batch_norm:
                         encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_, training=training,
                                                                         name='input_batch_norm_{}'.format(j + 1))
 
@@ -186,10 +188,10 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                                            [filter_height, filter_width, in_channels, out_channels])
                     encoder_inputs_ = tf.nn.conv2d(encoder_inputs_, filter_, strides, padding='SAME')
 
+                    if encoder.batch_norm:
+                        encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_, training=training,
+                                                                        name='conv_batch_norm_{}'.format(k))
                     if encoder.conv_activation is not None and encoder.conv_activation.lower() == 'relu':
-                        if encoder.batch_norm:   # do batch norm only before relu
-                            encoder_inputs_ = tf.layers.batch_normalization(encoder_inputs_, training=training,
-                                                                            name='conv_batch_norm_{}'.format(k))
                         encoder_inputs_ = tf.nn.relu(encoder_inputs_)
 
                     encoder_input_length_ = tf.to_int32(tf.ceil(encoder_input_length_ / strides[1]))
@@ -629,14 +631,16 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         decoder.cell_type = 'GRU'
 
     embedding_shape = [decoder.vocab_size, decoder.embedding_size]
-    weight_scale = decoder.weight_scale or 0.01
-    if decoder.initializer == 'uniform':
+    weight_scale = decoder.embedding_weight_scale or decoder.weight_scale
+    if weight_scale is None:
+        initializer = None  # FIXME
+    elif decoder.embedding_initializer == 'uniform' or (decoder.embedding_initializer is None
+                                                        and decoder.initializer == 'uniform'):
         initializer = tf.random_uniform_initializer(minval=-weight_scale, maxval=weight_scale)
     else:
         initializer = tf.random_normal_initializer(stddev=weight_scale)
 
-    device = '/cpu:0' if decoder.embeddings_on_cpu else None
-    with tf.device(device):
+    with tf.device('/cpu:0'):
         embedding = get_variable('embedding_{}'.format(decoder.name), shape=embedding_shape, initializer=initializer)
 
     input_shape = tf.shape(decoder_inputs)
@@ -795,7 +799,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             output_ = dense(output_, decoder.vocab_size, use_bias=True, name='softmax1')
         return output_
 
-    if decoder.use_dropout:
+    if decoder.use_dropout:   # FIXME: why no pervasive dropout here?
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope(scope_name):
@@ -826,7 +830,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_input = embed(initial_symbol)
     initial_pos = tf.zeros([batch_size], tf.float32)
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
-    initial_context, _ = look(initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights)
+    with tf.variable_scope('decoder_{}'.format(decoder.name)):
+        initial_context, _ = look(initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights)
     initial_data = tf.concat([initial_state, initial_context, tf.expand_dims(initial_pos, axis=1), initial_weights],
                              axis=1)
     context_size = initial_context.shape[1].value

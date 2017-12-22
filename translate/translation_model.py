@@ -14,7 +14,6 @@ from translate.seq2seq_model import Seq2SeqModel
 from subprocess import Popen, PIPE
 
 
-
 class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, name=None, ref_ext=None,

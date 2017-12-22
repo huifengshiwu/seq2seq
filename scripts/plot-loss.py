@@ -38,6 +38,7 @@ parser.add_argument('--print-latest', action='store_true')
 parser.add_argument('--print-best', action='store_true')
 parser.add_argument('--print-diff', action='store_true')
 parser.add_argument('--auto', action='store_true')
+parser.add_argument('--no-bold', action='store_true')
 
 parser.add_argument('--legend-loc', default='best')
 parser.add_argument('--center-legend', action='store_true')
@@ -239,7 +240,10 @@ metric_labels = {
 }
 
 def boldify(text):
-    return '\033[1m' + text + '\033[0m'
+    if args.no_bold:
+        return text
+    else:
+        return '\033[1m' + text + '\033[0m'
 
 if args.txt:
     # data = list(zip(*data))
