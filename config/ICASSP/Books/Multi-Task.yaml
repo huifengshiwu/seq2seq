@@ -10,7 +10,6 @@ learning_rate: 0.001
 batch_size: 32
 batch_mode: standard
 read_ahead: 10
-max_gradient_norm: 5.0
 
 steps_per_checkpoint: 500
 steps_per_eval: 500
@@ -38,7 +37,7 @@ embedding_size: 128
 
 tasks:
   - name: AST
-    score_function: corpus_scores
+    score_function: corpus_scores_bleu
     train_prefix: train+google
     dev_prefix: [dev, dev.google]
     ratio: 0.6
@@ -77,7 +76,7 @@ tasks:
         max_len: 300
 
   - name: MT
-    score_function: corpus_scores
+    score_function: corpus_scores_bleu
     train_prefix: train+google
     dev_prefix: [dev, dev.google]
     ratio: 0.2

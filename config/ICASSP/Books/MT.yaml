@@ -12,13 +12,12 @@ learning_rate: 0.001
 batch_size: 64
 batch_mode: standard
 read_ahead: 10
-max_gradient_norm: 1.0
 
 
 steps_per_checkpoint: 1000
 steps_per_eval: 1000
 max_steps: 100000
-score_function: corpus_scores
+score_function: corpus_scores_bleu
 
 cell_size: 512
 attn_size: 512
@@ -32,7 +31,7 @@ encoders:
     bidir_projection: True
     final_state: average
     train_initial_states: True
-    embedding_dropout: 0.2
+    word_dropout: 0.2
 
 decoders:
   - name: char.fr
@@ -42,7 +41,7 @@ decoders:
     use_previous_word: True
     deep_layer_size: 512
     embedding_size: 128
-    max_len: 400
+    max_len: 300
     word_dropout: 0.2
 
 use_dropout: True
@@ -50,4 +49,3 @@ pervasive_dropout: True
 attn_dropout: 0.2
 rnn_input_dropout: 0.2
 initial_state_dropout: 0.2
-rnn_output_dropout: 0.2

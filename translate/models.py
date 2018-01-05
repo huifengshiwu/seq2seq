@@ -201,6 +201,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
                 time_steps = tf.shape(encoder_inputs_)[1]
 
                 encoder_inputs_ = tf.reshape(encoder_inputs_, [batch_size, time_steps, feature_size * channels])
+                conv_outputs_ = encoder_inputs_
 
                 if encoder.conv_lstm_size:
                     cell = BasicConvLSTMCell([feature_size, channels], encoder.conv_lstm_size, 1)
@@ -351,6 +352,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
             if encoder.attend_inputs:
                 encoder_outputs.append(encoder_inputs_)
+            elif encoder.attend_both:
+                encoder_outputs.append(tf.concat([encoder_inputs_, encoder_outputs_], axis=2))
             else:
                 encoder_outputs.append(encoder_outputs_)
 
