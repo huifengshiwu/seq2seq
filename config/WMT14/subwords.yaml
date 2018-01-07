@@ -4,7 +4,6 @@ description: "Baseline WMT14 model with conditional decoder + joint subwords"
 cell_size: 1000
 attn_size: 1000
 embedding_size: 620
-bidir: True
 cell_type: GRU
 
 data_dir: data/WMT14
@@ -15,7 +14,7 @@ max_train_size: 1000000
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
 keep_best: 1
-max_to_keep: null
+max_to_keep: 8
 
 optimizer: adam
 learning_rate: 0.0002
@@ -23,7 +22,6 @@ batch_size: 80
 batch_mode: standard
 read_ahead: 20
 max_gradient_norm: 1.0
-
 max_epochs: 5
 learning_rate_decay_factor: 0.5
 decay_every_n_epoch: 0.5
@@ -39,5 +37,6 @@ encoders:
 decoders:
   - name: jsub.fr
     conditional_rnn: True
+    pred_deep_layer: True
 
 orthogonal_init: True

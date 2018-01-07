@@ -311,8 +311,8 @@ name_mapping = {
     'corpus_wer': ['wer', 'loss'],
     'corpus_bleu1': ['bleu1', 'loss'],
     'corpus_cer': ['cer', 'loss'],
-    'corpus_scores': ['bleu', 'ter', 'wer', 'bleu1', 'cer', 'loss'],
-    'corpus_scores_bleu': ['bleu', 'ter', 'wer', 'bleu1', 'cer', 'loss'],
-    'corpus_scores_ter': ['ter', 'bleu', 'wer', 'bleu1', 'cer', 'loss'],
-    'corpus_scores_wer': ['wer', 'bleu', 'ter', 'bleu1', 'cer', 'loss']
+    'corpus_scores': ['bleu', 'ter', 'wer', 'bleu1', 'loss'],
+    'corpus_scores_bleu': ['bleu', 'ter', 'wer', 'bleu1', 'loss'],
+    'corpus_scores_ter': ['ter', 'bleu', 'wer', 'bleu1', 'loss'],
+    'corpus_scores_wer': ['wer', 'bleu', 'ter', 'bleu1', 'loss']
 }

@@ -103,7 +103,7 @@ generate_first: True      # generate next word before updating state (look->gene
 update_first: False       # update state before looking and generating next word
 rnn_feed_attn: True       # feed attention context to the RNN's transition fonction
 use_lstm_full_state: False # use LSTM's full state for attention and next word prediction
-pred_embed_proj: True     # project decoder output to embedding size before projecting to vocab size
+pred_embed_proj: False    # project decoder output to embedding size before projecting to vocab size
 pred_deep_layer: False    # add a non-linear transformation just before softmax
 pred_maxout_layer: True   # use a maxout layer just before the vocabulary projection and softmax
 aggregation_method: concat # how to combine the attention contexts of multiple encoders (concat, sum)
@@ -123,14 +123,13 @@ checkpoints: []          # list of checkpoints to load (in this specific order) 
 # decoding
 
 # scoring functions used for evaluation, defined inside 'evaluation.py' (with corpus_ prefix)
-score_functions: [loss, bleu, wer, ter, bleu1, cer]  # the first one is the main scoring function, used for model selection
+score_functions: [loss, bleu, wer, ter, bleu1]  # the first one is the main scoring function, used for model selection
 post_process_script: null # path to post-processing script (called before evaluating)
 remove_unk: False        # remove UNK symbols from the decoder output
 beam_size: 1             # beam size for decoding (decoder is greedy by default)
 ensemble: False          # use an ensemble of models while decoding (specified by the --checkpoints parameter)
 output: null             # output file for decoding (writes to standard output by default)
 len_normalization: 1.0   # length normalization coefficient used in beam-search decoder
-early_stopping: True     # reduce beam-size each time a finished hypothesis is encountered (affects decoding speed)
 raw_output: False        # output translation hypotheses without any post-processing
 average: False           # like ensemble, but instead of averaging the log-probs, average all parameters
 

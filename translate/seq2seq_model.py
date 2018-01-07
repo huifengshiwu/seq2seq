@@ -111,7 +111,7 @@ class Seq2SeqModel(object):
         self.beam_scores = tf.zeros(shape=[tf.shape(self.beam_outputs)[0], 1])
         self.beam_size = 1
 
-    def create_beam_op(self, models, beam_size, len_normalization, early_stopping=True):
+    def create_beam_op(self, models, beam_size, len_normalization):
         self.beam_size = beam_size
         self.len_normalization = len_normalization
         self.models = models
@@ -120,7 +120,7 @@ class Seq2SeqModel(object):
             beam_funs = [model.beam_fun for model in models]
             initial_data = [model.initial_data for model in models]
             beam_output = beam_search.rnn_beam_search(beam_funs, initial_data, self.max_output_len[0], beam_size,
-                                                      len_normalization, early_stopping, temperature=self.temperature)
+                                                      len_normalization, temperature=self.temperature)
             self.beam_outputs, self.beam_scores = beam_output
 
     @staticmethod

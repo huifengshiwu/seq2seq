@@ -18,7 +18,7 @@ class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, name=None, ref_ext=None,
                  pred_edits=False, dual_output=False, binary=None, truncate_lines=True, ensemble=False,
-                 checkpoints=None, beam_size=1, len_normalization=1, early_stopping=True, lexicon=None, **kwargs):
+                 checkpoints=None, beam_size=1, len_normalization=1, lexicon=None, **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
@@ -97,7 +97,7 @@ class TranslationModel:
                                               baseline_step=self.baseline_step, **kwargs)
             self.models.append(self.seq2seq_model)
 
-        self.seq2seq_model.create_beam_op(self.models, beam_size, len_normalization, early_stopping)
+        self.seq2seq_model.create_beam_op(self.models, beam_size, len_normalization)
 
         self.batch_iterator = None
         self.dev_batches = None
