@@ -25,33 +25,43 @@ parser.add_argument('--all', '-a', action='store_true')
 parser.add_argument('--max-size', type=int)
 parser.add_argument('--no-punk', action='store_true')
 
+parser.add_argument('--max-len', type=int, default=0)
+parser.add_argument('--min-len', type=int, default=0)
+
 parser.add_argument('--case-insensitive', '-i', action='store_true')
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
 
+    if not args.max_len:
+        args.max_len = float('inf')
+
     if not any([args.all, args.wer, args.ter, args.bleu, args.cer, args.bleu1]):
         args.all = True
 
     if args.all:
-        args.wer = args.ter = args.bleu = args.cer = args.bleu1 = True
+        args.wer = args.ter = args.bleu = args.bleu1 = True
 
     with open(args.source) as src_file, open(args.target) as trg_file:
-        def remove_punk(sentence):
-            sentence = re.sub(r'[,!;:?"]', '', sentence)
-            return re.sub(r'\s+', ' ', sentence)
 
-        if args.case_insensitive:
-            hypotheses = [line.strip().lower() for line in src_file]
-            references = [line.strip().lower() for line in trg_file]
-        else:
-            hypotheses = [line.strip() for line in src_file]
-            references = [line.strip() for line in trg_file]
+        lines = [(src, trg) for src, trg in zip(src_file, trg_file)
+                 if args.min_len <= len(trg.split()) <= args.max_len]
+        src_lines, trg_lines = zip(*lines)
 
-        if args.no_punk:
-            hypotheses = [remove_punk(line) for line in hypotheses]
-            references = [remove_punk(line) for line in references]
+        def transform(sentence):
+            sentence = sentence.strip()
+            sentence = re.sub(r'\s+', ' ', sentence)
+            if args.case_insensitive:
+                sentence = sentence.lower()
+            if args.no_punk:
+                sentence = re.sub(r'[,!;:?"\'\.]', '', sentence)
+            sentence = re.sub(r'@@ ', '', sentence)
+            sentence = re.sub(r'@@', '', sentence)
+            return sentence
+
+        hypotheses = list(map(transform, src_lines))
+        references = list(map(transform, trg_lines))
 
         if args.max_size is not None:
             hypotheses = hypotheses[:args.max_size]

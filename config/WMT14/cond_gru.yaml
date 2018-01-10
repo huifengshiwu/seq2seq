@@ -4,7 +4,6 @@ description: "Baseline WMT14 model with conditional decoder"
 cell_size: 1000
 attn_size: 1000
 embedding_size: 620
-bidir: True
 cell_type: GRU
 
 data_dir: data/WMT14

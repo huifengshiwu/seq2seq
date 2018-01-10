@@ -48,4 +48,5 @@ use_dropout: True
 pervasive_dropout: True
 attn_dropout: 0.2
 rnn_input_dropout: 0.2
+rnn_output_dropout: 0.2
 initial_state_dropout: 0.2

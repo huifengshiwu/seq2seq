@@ -18,11 +18,12 @@ class TranslationModel:
     def __init__(self, encoders, decoders, checkpoint_dir, learning_rate, learning_rate_decay_factor,
                  batch_size, keep_best=1, dev_prefix=None, name=None, ref_ext=None,
                  pred_edits=False, dual_output=False, binary=None, truncate_lines=True, ensemble=False,
-                 checkpoints=None, beam_size=1, len_normalization=1, lexicon=None, **kwargs):
+                 checkpoints=None, beam_size=1, len_normalization=1, lexicon=None, debug=False, **kwargs):
 
         self.batch_size = batch_size
         self.character_level = {}
         self.binary = []
+        self.debug = debug
 
         for encoder_or_decoder in encoders + decoders:
             encoder_or_decoder.ext = encoder_or_decoder.ext or encoder_or_decoder.name
@@ -164,7 +165,7 @@ class TranslationModel:
         line_id = 0
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, align=unk_replace or align)
+            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, align=unk_replace or align or self.debug)
             batch_token_ids = zip(*batch_token_ids)
 
             for sentence_id, (src_tokens, trg_token_ids) in enumerate(zip(batch, batch_token_ids)):
@@ -183,26 +184,37 @@ class TranslationModel:
                 if align:
                     weights_ = batch_weights[sentence_id].squeeze()
                     max_len_ = weights_.shape[1]
-                    src_tokens_ = src_tokens[0].split()[:max_len_ - 1] + [utils._EOS]
-                    src_tokens_ = [token if token in self.src_vocab[0].vocab else utils._UNK for token in src_tokens_]
-                    trg_tokens_ = trg_tokens[0][:weights_.shape[0] - 1] + [utils._EOS]
 
-                    weights_ = weights_[:len(trg_tokens_),:len(src_tokens_)]
+                    if self.binary:
+                        src_tokens_ = None
+                    else:
+                        src_tokens_ = src_tokens[0].split()[:max_len_ - 1] + [utils._EOS]
+                        src_tokens_ = [token if token in self.src_vocab[0].vocab else utils._UNK for token in src_tokens_]
+                        weights_ = weights_[:,:len(src_tokens_)]
+
+                    trg_tokens_ = trg_tokens[0][:weights_.shape[0] - 1] + [utils._EOS]
+                    weights_ = weights_[:len(trg_tokens_)]
                     output_file = output and '{}.{}.pdf'.format(output, line_id)
                     utils.heatmap(src_tokens_, trg_tokens_, weights_, reverse=reverse, output_file=output_file)
 
-                if unk_replace:
+                if self.debug or unk_replace:
                     weights = batch_weights[sentence_id]
                     src_words = src_tokens[0].split()
                     align_ids = np.argmax(weights[:,:len(src_words)], axis=1)
+                else:
+                    align_ids = [0] * len(trg_tokens[0])
+                def replace(token, align_id):
+                    if self.debug and (not unk_replace or token == utils._UNK):
+                        suffix = '({})'.format(align_id)
+                    else:
+                        suffix = ''
+                    if token == utils._UNK and unk_replace:
+                        token = src_words[align_id]
+                        if not token[0].isupper() and self.lexicon is not None and token in self.lexicon:
+                            token = self.lexicon[token]
+                    return token + suffix
 
-                    def replace(token, align_id):
-                        if token == utils._UNK:
-                            token = src_words[align_id]
-                            if not token[0].isupper() and self.lexicon is not None and token in self.lexicon:
-                                token = self.lexicon[token]
-                        return token
-                    trg_tokens[0] = [replace(token, align_id) for align_id, token in zip(align_ids, trg_tokens[0])]
+                trg_tokens[0] = [replace(token, align_id) for align_id, token in zip(align_ids, trg_tokens[0])]
 
                 if self.pred_edits:
                     # first output is ops, second output is words
@@ -226,7 +238,7 @@ class TranslationModel:
                 yield hypothesis, raw_hypothesis
 
 
-    def align(self, output=None, align_encoder_id=0, reverse=False, **kwargs):
+    def align(self, output=None, align_encoder_id=0, reverse=False, max_test_size=None, **kwargs):
         if len(self.filenames.test) != len(self.extensions):
             raise Exception('wrong number of input files')
 
@@ -234,6 +246,9 @@ class TranslationModel:
 
         paths = self.filenames.test or [None]
         lines = utils.read_lines(paths, binary=self.binary)
+
+        if max_test_size:
+            lines = itertools.islice(lines, max_test_size)
 
         for line_id, lines in enumerate(lines):
             token_ids = [
@@ -381,7 +396,7 @@ class TranslationModel:
                     hypothesis, raw = hypothesis
 
                     hypotheses.append(hypothesis)
-                    references.append(reference.strip().replace('@@ ', ''))
+                    references.append(reference.strip().replace('@@ ', '').replace('@@', ''))
 
                     if output_file is not None:
                         if raw_output:

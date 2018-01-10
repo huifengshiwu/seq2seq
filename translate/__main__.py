@@ -55,6 +55,9 @@ parser.add_argument('--pred-edits', action='store_const', const=True, help='pred
 parser.add_argument('--model-dir', help='use this directory as model root')
 parser.add_argument('--batch-size', type=int, help='number of lines in a batch')
 parser.add_argument('--no-fix', action='store_const', dest='fix_edits', const=False, help='disable automatic fixing of edit op sequences')
+
+parser.add_argument('--max-len', type=int, help='maximum sequence length')
+parser.add_argument('--max-input-len', type=int, help='maximum length of the input sequences')
 parser.add_argument('--max-output-len', type=int, help='maximum length of the output sequence (control decoding speed)')
 
 parser.add_argument('--unk-replace', action='store_const', const=True, help='replace UNK symbols from decoding output by using attention mechanism')
@@ -178,8 +181,12 @@ def main(args=None):
             for parameter, value in task.items():
                 encoder_or_decoder.setdefault(parameter, value)
 
-        if args.max_output_len is not None:   # override decoder's max len
+        if args.max_len:
+            args.max_input_len = args.max_len
+        if args.max_output_len:   # override decoder's max len
             task.decoders[0].max_len = args.max_output_len
+        if args.max_input_len:    # override encoder's max len
+            task.encoders[0].max_len = args.max_input_len
 
     config.checkpoint_dir = os.path.join(config.model_dir, 'checkpoints')
 

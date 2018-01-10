@@ -22,7 +22,7 @@ cell_type: LSTM
 conv_filters: [16, 16]
 conv_size: [3, 3]
 conv_strides: [2, 2]
-conv_activation: relu
+conv_activation: null
 final_state: average
 train_initial_states: False
 bidir_projection: False
@@ -48,7 +48,7 @@ tasks:
         layers: 3
         cell_size: 256
         binary: True
-        max_len: 1300
+        max_len: 1400
     decoders:
       - name: char.fr
         character_level: True
@@ -67,7 +67,7 @@ tasks:
         attn_size: 256
         binary: True
         bidir_projection: True
-        max_len: 1300
+        max_len: 1400
     decoders:
       - name: char.en
         cell_size: 256

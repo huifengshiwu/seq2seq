@@ -543,7 +543,11 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None, reverse=
     :param weights: numpy array of shape (len(xlabels), len(ylabels))
     :param output_file: write the figure to this file, or show it into a window if None
     """
+    import matplotlib
     from matplotlib import pyplot as plt
+
+    if reverse and not ylabels:
+        matplotlib.rcParams.update({'font.size': 18})
 
     def prettify(token):
         token_mapping = {
@@ -588,10 +592,12 @@ def heatmap(xlabels=None, ylabels=None, weights=None, output_file=None, reverse=
 
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
-    plt.tight_layout()
     plt.subplots_adjust(wspace=0, hspace=0)
-    ax.set_aspect('equal')
-    ax.grid(True)
+
+    if not reverse or ylabels:
+        plt.tight_layout()
+        ax.set_aspect('equal')
+        ax.grid(True)
 
     xsize = max(2.0 + len(xlabels) / 3, 8.0)
     ysize = max(2.0 + len(ylabels) / 3, 8.0)

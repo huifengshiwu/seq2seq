@@ -7,7 +7,7 @@ embedding_size: 620
 cell_type: GRU
 
 data_dir: data/WMT14
-max_len: 50
+max_len: 60
 model_dir: models/WMT14/subwords
 max_train_size: 1000000
 
