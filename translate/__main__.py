@@ -71,6 +71,8 @@ parser.add_argument('--tf-seed', type=int)
 parser.add_argument('--seed', type=int)
 parser.add_argument('--reverse', action='store_true')
 
+parser.add_argument('--parallel-iterations', type=int)
+
 def main(args=None):
     args = parser.parse_args(args)
 

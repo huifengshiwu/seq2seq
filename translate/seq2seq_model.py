@@ -109,19 +109,18 @@ class Seq2SeqModel(object):
         self.models = [self]
         self.beam_outputs = tf.expand_dims(tf.argmax(self.outputs[0], axis=2), axis=1)
         self.beam_scores = tf.zeros(shape=[tf.shape(self.beam_outputs)[0], 1])
-        self.beam_size = 1
+        self.beam_size = tf.placeholder(shape=(), dtype=tf.int32)
 
-    def create_beam_op(self, models, beam_size, len_normalization):
-        self.beam_size = beam_size
+    def create_beam_op(self, models, len_normalization):
         self.len_normalization = len_normalization
         self.models = models
-
-        if beam_size > 1 or len(models) > 1:
-            beam_funs = [model.beam_fun for model in models]
-            initial_data = [model.initial_data for model in models]
-            beam_output = beam_search.rnn_beam_search(beam_funs, initial_data, self.max_output_len[0], beam_size,
-                                                      len_normalization, temperature=self.temperature)
-            self.beam_outputs, self.beam_scores = beam_output
+        beam_funs = [model.beam_fun for model in models]
+        initial_data = [model.initial_data for model in models]
+        beam_output = beam_search.rnn_beam_search(beam_funs, initial_data, self.max_output_len[0], self.beam_size,
+                                                  len_normalization, temperature=self.temperature,
+                                                  parallel_iterations=self.decoders[0].parallel_iterations,
+                                                  swap_memory=self.decoders[0].swap_memory)
+        self.beam_outputs, self.beam_scores = beam_output
 
     @staticmethod
     def get_optimizers(optimizer_name, learning_rate):
@@ -237,7 +236,7 @@ class Seq2SeqModel(object):
         res = tf.get_default_session().run(output_feed, input_feed)
         return namedtuple('output', 'loss weights')(res['loss'], res.get('weights'))
 
-    def greedy_decoding(self, token_ids, align=False):
+    def greedy_decoding(self, token_ids, align=False, beam_size=1):
         for model in self.models:
             model.dropout_off.run()
 
@@ -249,7 +248,7 @@ class Seq2SeqModel(object):
         batch = self.get_batch(data, decoding=True)
         encoder_inputs, targets, input_length = batch
 
-        input_feed = {}
+        input_feed = {self.beam_size: beam_size}
         for model in self.models:
             input_feed[model.targets] = targets
             input_feed[model.feed_previous] = 1.0

@@ -3,6 +3,7 @@ import math
 from tensorflow.contrib.rnn import BasicLSTMCell, RNNCell, DropoutWrapper, MultiRNNCell
 from translate.rnn import stack_bidirectional_dynamic_rnn, CellInitializer, GRUCell, DropoutGRUCell, PLSTM
 from translate.rnn import get_state_size
+from translate.beam_search import get_weights
 from translate import utils, beam_search
 from translate.conv_lstm import BasicConvLSTMCell
 
@@ -1135,20 +1136,6 @@ def sequence_loss(logits, targets, weights, average_across_timesteps=False, aver
         return cost / tf.to_float(batch_size)
     else:
         return cost
-
-
-def get_weights(sequence, eos_id, include_first_eos=True):
-    cumsum = tf.cumsum(tf.to_float(tf.not_equal(sequence, eos_id)), axis=1)
-    range_ = tf.range(start=1, limit=tf.shape(sequence)[1] + 1)
-    range_ = tf.tile(tf.expand_dims(range_, axis=0), [tf.shape(sequence)[0], 1])
-    weights = tf.to_float(tf.equal(cumsum, tf.to_float(range_)))
-
-    if include_first_eos:
-        weights = weights[:,:-1]
-        shape = [tf.shape(weights)[0], 1]
-        weights = tf.concat([tf.ones(tf.stack(shape)), weights], axis=1)
-
-    return tf.stop_gradient(weights)
 
 
 def reinforce_baseline(decoder_states, reward):

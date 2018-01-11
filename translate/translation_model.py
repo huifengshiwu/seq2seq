@@ -51,6 +51,7 @@ class TranslationModel:
 
         self.max_input_len = [encoder.max_len for encoder in encoders]
         self.max_output_len = [decoder.max_len for decoder in decoders]
+        self.beam_size = beam_size
 
         if truncate_lines:
             self.max_len = None   # we let seq2seq.get_batch handle long lines (by truncating them)
@@ -98,7 +99,7 @@ class TranslationModel:
                                               baseline_step=self.baseline_step, **kwargs)
             self.models.append(self.seq2seq_model)
 
-        self.seq2seq_model.create_beam_op(self.models, beam_size, len_normalization)
+        self.seq2seq_model.create_beam_op(self.models, len_normalization)
 
         self.batch_iterator = None
         self.dev_batches = None
@@ -165,7 +166,8 @@ class TranslationModel:
         line_id = 0
         for batch_id, batch in enumerate(batches):
             token_ids = list(map(map_to_ids, batch))
-            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, align=unk_replace or align or self.debug)
+            batch_token_ids, batch_weights = self.seq2seq_model.greedy_decoding(token_ids, beam_size=self.beam_size,
+                                                                                align=unk_replace or align or self.debug)
             batch_token_ids = zip(*batch_token_ids)
 
             for sentence_id, (src_tokens, trg_token_ids) in enumerate(zip(batch, batch_token_ids)):
