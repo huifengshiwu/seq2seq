@@ -725,7 +725,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             state = tf.concat([state, context], axis=1)
 
         if decoder.hidden_state_scaling:
-            attention_states *= decoder.hidden_state_scaling
+            attention_states[0] = attention_states[0] * decoder.hidden_state_scaling  # FIXME
 
         parameters = dict(hidden_states=attention_states, encoder_input_length=encoder_input_length,
                           encoders=encoders, aggregation_method=decoder.aggregation_method)
@@ -854,7 +854,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_input = embed(initial_symbol)
     initial_pos = tf.zeros([batch_size], tf.float32)
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
-    zero_context = tf.zeros(shape=tf.shape(attention_states[:,0]))  # FIXME
+    zero_context = tf.zeros(shape=tf.shape(attention_states[align_encoder_id][:,0]))  # FIXME
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
         initial_context, _ = look(0, initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights,
