@@ -1000,7 +1000,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
 def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
                                    encoder_input_length=None, training=True, reconstruction_weight=1.0,
                                    reconstruction_attn_weight=0.05, **kwargs):
-    encoders = encoders[1:]
+    encoders = encoders[:1]
 
     if encoder_input_length is None:
         weights = get_weights(encoder_inputs[0], utils.EOS_ID, include_first_eos=True)
