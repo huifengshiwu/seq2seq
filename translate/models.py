@@ -366,7 +366,7 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
 
 
 def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_dropout=False, layer_norm=False,
-                   mult_attn=False, **kwargs):
+                   mult_attn=False, position_bias=False, time=None, input_length=None, **kwargs):
     if attn_keep_prob is not None:
         state_noise_shape = [1, tf.shape(state)[1]] if pervasive_dropout else None
         state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=state_noise_shape)
@@ -385,11 +385,22 @@ def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_drop
             y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
             hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
 
-        f = dense(hidden, attn_size, use_bias=False, name='U_a')
+        y += dense(hidden, attn_size, use_bias=False, name='U_a')
+
+        if position_bias and input_length is not None and time is not None:
+            batch_size = tf.shape(hidden)[0]
+            time_steps = tf.shape(hidden)[1]
+
+            src_pos = tf.tile(tf.expand_dims(tf.range(0, time_steps), axis=0), [batch_size, 1])
+            trg_pos = tf.tile(tf.reshape(time, [1, 1]), [batch_size, time_steps])
+            src_len = tf.tile(tf.expand_dims(input_length, axis=1), [1, time_steps])
+            pos_feats = tf.to_float(tf.stack([src_pos, trg_pos, src_len], axis=2))
+            pos_feats = tf.log(1 + pos_feats)
+
+            y += dense(pos_feats, attn_size, use_bias=False, name='P_a')
 
         v = get_variable('v_a', [attn_size])
-        s = f + y
-        return tf.reduce_sum(v * tf.tanh(s), axis=2)
+        return tf.reduce_sum(v * tf.tanh(y), axis=2)
 
 
 def compute_energy_with_filter(hidden, state, prev_weights, attn_filters, attn_filter_length,
@@ -432,11 +443,14 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         if encoder.attn_filters:
             e = compute_energy_with_filter(hidden_states, state, attn_size=encoder.attn_size,
                                            attn_filters=encoder.attn_filters,
-                                           attn_filter_length=encoder.attn_filter_length, **kwargs)
+                                           attn_filter_length=encoder.attn_filter_length,
+                                           input_length=encoder_input_length, **kwargs)
         else:
             e = compute_energy(hidden_states, state, attn_size=encoder.attn_size,
                                attn_keep_prob=encoder.attn_keep_prob, pervasive_dropout=encoder.pervasive_dropout,
-                               layer_norm=encoder.layer_norm, mult_attn=encoder.mult_attn, **kwargs)
+                               layer_norm=encoder.layer_norm, mult_attn=encoder.mult_attn,
+                               position_bias=encoder.position_bias,
+                               input_length=encoder_input_length, **kwargs)
 
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
 
@@ -699,7 +713,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         else:
             return CellWrapper(MultiRNNCell(cells))
 
-    def look(state, input_, prev_weights=None, pos=None):
+    def look(time, state, input_, prev_weights=None, pos=None, context=None):
         prev_weights_ = [prev_weights if i == align_encoder_id else None for i in range(len(encoders))]
         pos_ = None
         if decoder.pred_edits:
@@ -707,9 +721,15 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         if decoder.attn_prev_word:
             state = tf.concat([state, input_], axis=1)
 
+        if decoder.attn_prev_attn and context is not None:
+            state = tf.concat([state, context], axis=1)
+
+        if decoder.hidden_state_scaling:
+            attention_states *= decoder.hidden_state_scaling
+
         parameters = dict(hidden_states=attention_states, encoder_input_length=encoder_input_length,
                           encoders=encoders, aggregation_method=decoder.aggregation_method)
-        context, new_weights = multi_attention(state, pos=pos_, prev_weights=prev_weights_, **parameters)
+        context, new_weights = multi_attention(state, time=time, pos=pos_, prev_weights=prev_weights_, **parameters)
 
         if decoder.context_mapping:
             with tf.variable_scope(scope_name):
@@ -834,8 +854,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     initial_input = embed(initial_symbol)
     initial_pos = tf.zeros([batch_size], tf.float32)
     initial_weights = tf.zeros(tf.shape(attention_states[align_encoder_id])[:2])
+    zero_context = tf.zeros(shape=tf.shape(attention_states[:,0]))  # FIXME
+
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
-        initial_context, _ = look(initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights)
+        initial_context, _ = look(0, initial_output, initial_input, pos=initial_pos, prev_weights=initial_weights,
+                                  context=zero_context)
     initial_data = tf.concat([initial_state, initial_context, tf.expand_dims(initial_pos, axis=1), initial_weights],
                              axis=1)
     context_size = initial_context.shape[1].value
@@ -868,7 +891,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
                                         lambda: (output, state),
                                         lambda: update(state, input_, context, ids))
 
-            context, new_weights = look(output, input_, pos=pos, prev_weights=prev_weights)
+            context, new_weights = look(time, output, input_, pos=pos, prev_weights=prev_weights, context=context)
 
             if decoder.conditional_rnn:
                 with tf.variable_scope('conditional_2'):
@@ -883,14 +906,14 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             return state, logits
 
     def _time_step(time, input_, input_symbol, pos, state, output, outputs, states, weights, attns, prev_weights,
-                   samples):
+                   samples, context):
         if decoder.conditional_rnn:
             with tf.variable_scope('conditional_1'):
                 output, state = update(state, input_)
         elif decoder.update_first:
             output, state = update(state, input_, None, input_symbol)
 
-        context, new_weights = look(output, input_, pos=pos, prev_weights=prev_weights)
+        context, new_weights = look(time, output, input_, pos=pos, prev_weights=prev_weights, context=context)
 
         if decoder.conditional_rnn:
             with tf.variable_scope('conditional_2'):
@@ -927,14 +950,14 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             output, state = update(state, input_, context, predicted_symbol)
 
         return (time + 1, input_, predicted_symbol, pos, state, output, outputs, states, weights, attns, new_weights,
-                samples)
+                samples, context)
 
     with tf.variable_scope('decoder_{}'.format(decoder.name)):
-        _, _, _, new_pos, new_state, _, outputs, states, weights, attns, new_weights, samples = tf.while_loop(
+        _, _, _, new_pos, new_state, _, outputs, states, weights, attns, new_weights, samples, _ = tf.while_loop(
             cond=lambda time, *_: time < time_steps,
             body=_time_step,
             loop_vars=(time, initial_input, initial_symbol, initial_pos, initial_state, initial_output, outputs,
-                       weights, states, attns, initial_weights, samples),
+                       weights, states, attns, initial_weights, samples, initial_context),
             parallel_iterations=decoder.parallel_iterations,
             swap_memory=decoder.swap_memory)
 

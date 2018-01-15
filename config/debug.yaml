@@ -25,11 +25,14 @@ max_steps: 30000
 
 encoders:
   - name: fr
+    position_bias: True
+    pos_embedding_size: 32
 
 decoders:
   - name: en
     conditional_rnn: True
     pred_deep_layer: True
+    attn_prev_attn: True
 
 use_dropout: True
 pervasive_dropout: True
