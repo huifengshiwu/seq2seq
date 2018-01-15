@@ -265,6 +265,7 @@ class TranslationModel:
             trg_token_ids = token_ids[len(self.src_ext)]
             trg_tokens = [trg_vocab.reverse[i] if i < len(trg_vocab.reverse) else utils._UNK for i in trg_token_ids]
 
+            weights = weights[0]  # can contain a list of forward and backward attention (cf. reconstruction decoders)
             weights = weights.squeeze()
             max_len = weights.shape[1]
 
@@ -277,6 +278,7 @@ class TranslationModel:
             output_file = output and '{}.{}.pdf'.format(output, line_id + 1)
 
             utils.heatmap(src_tokens, trg_tokens, weights, output_file=output_file, reverse=reverse)
+
 
     def decode(self, output=None, remove_unk=False, raw_output=False, max_test_size=None, unk_replace=False,
                align=False, reverse=False, **kwargs):
@@ -647,7 +649,7 @@ class TranslationModel:
                 f.write('{:.2f} {}\n'.format(score_, step_))
 
     def initialize(self, checkpoints=None, reset=False, reset_learning_rate=False, max_to_keep=1,
-                   keep_every_n_hours=0, sess=None, **kwargs):
+                   keep_every_n_hours=0, sess=None, whitelist=None, blacklist=None, **kwargs):
         """
         :param checkpoints: list of checkpoints to load (instead of latest checkpoint)
         :param reset: don't load latest checkpoint, reset learning rate and global step
@@ -690,7 +692,16 @@ class TranslationModel:
                             embedding_value[i] = embeddings[word]
                     sess.run(embedding_var.assign(embedding_value))
 
-        blacklist = ['dropout_keep_prob']
+        if whitelist:
+            with open(whitelist) as f:
+                whitelist = list(line.strip() for line in f)
+        if blacklist:
+            with open(blacklist) as f:
+                blacklist = list(line.strip() for line in f)
+        else:
+            blacklist = []
+
+        blacklist.append('dropout_keep_prob')
 
         if reset_learning_rate or reset:
             blacklist.append('learning_rate')
@@ -702,12 +713,13 @@ class TranslationModel:
         if checkpoints and len(self.models) > 1:
             assert len(self.models) == len(checkpoints)
             for i, checkpoint in enumerate(checkpoints, 1):
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, prefix='model_{}'.format(i), **params)
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, whitelist=whitelist,
+                                prefix='model_{}'.format(i), **params)
         elif checkpoints:  # load partial checkpoints
             for checkpoint in checkpoints:  # checkpoint files to load
-                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, **params)
+                load_checkpoint(sess, None, checkpoint, blacklist=blacklist, whitelist=whitelist, **params)
         elif not reset:
-            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist, **params)
+            load_checkpoint(sess, self.checkpoint_dir, blacklist=blacklist, whitelist=whitelist, **params)
 
         utils.debug('global step: {}'.format(self.global_step.eval()))
         utils.debug('baseline step: {}'.format(self.baseline_step.eval()))
@@ -724,7 +736,7 @@ global_reverse_mapping = [     # map new names to old names
 
 
 def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=None, variable_mapping=None,
-                    reverse_mapping=None):
+                    whitelist=None, reverse_mapping=None):
     """
     if `filename` is None, we load last checkpoint, otherwise
       we ignore `checkpoint_dir` and load the given checkpoint file.
@@ -776,7 +788,8 @@ def load_checkpoint(sess, checkpoint_dir, filename=None, blacklist=(), prefix=No
     vars_ = dict(zip(var_names_, vars_))
 
     variables = {old_name[:-2]: vars_[new_name] for old_name, new_name in name_mapping.items()
-                 if new_name in vars_ and not any(prefix in new_name for prefix in blacklist)}
+                 if new_name in vars_ and not any(prefix in new_name for prefix in blacklist) and
+                 (whitelist is None or new_name in whitelist)}
 
     if filename is not None:
         utils.log('reading model parameters from {}'.format(filename))

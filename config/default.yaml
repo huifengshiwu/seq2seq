@@ -108,6 +108,10 @@ pred_deep_layer: False    # add a non-linear transformation just before softmax
 pred_maxout_layer: True   # use a maxout layer just before the vocabulary projection and softmax
 aggregation_method: concat # how to combine the attention contexts of multiple encoders (concat, sum)
 
+reconstruction_decoders: False
+reconstruction_weight: 1.0
+reconstruction_attn_weight: 0.05
+
 # data
 max_train_size: 0        # maximum size of the training data (0 for unlimited)
 max_dev_size: 0          # maximum size of the dev data

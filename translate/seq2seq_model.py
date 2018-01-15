@@ -14,7 +14,7 @@ class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, use_dropout=False,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False,
                  len_normalization=1.0, name=None, chained_encoders=False, pred_edits=False, baseline_step=None,
-                 use_baseline=True, reverse_input=False, moving_average=None, **kwargs):
+                 use_baseline=True, reverse_input=False, moving_average=None, reconstruction_decoders=False, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.temperature = self.decoders[0].temperature
@@ -75,12 +75,12 @@ class Seq2SeqModel(object):
         ])
         self.rewards = tf.placeholder(tf.float32, shape=[None, None], name='rewards')
 
-        if chained_encoders and pred_edits:
+        if reconstruction_decoders:
+            architecture = models.reconstruction_encoder_decoder
+        elif chained_encoders and pred_edits:
              architecture = models.chained_encoder_decoder    # no REINFORCE for now
         else:
              architecture = models.encoder_decoder
-        # elif dual_output or pred_edits:
-        #     architecture = models.multi_encoder_decoder
 
         tensors = architecture(encoders, decoders, self.encoder_inputs, self.targets, self.feed_previous,
                                encoder_input_length=self.encoder_input_length, feed_argmax=self.feed_argmax,

@@ -997,6 +997,51 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
 
 
+def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
+                                   encoder_input_length=None, training=True, reconstruction_weight=1.0,
+                                   reconstruction_attn_weight=0.05, **kwargs):
+    encoders = encoders[1:]
+
+    if encoder_input_length is None:
+        weights = get_weights(encoder_inputs[0], utils.EOS_ID, include_first_eos=True)
+        encoder_input_length = [tf.to_int32(tf.reduce_sum(weights, axis=1))]
+
+    attention_states, encoder_state, encoder_input_length = multi_encoder(
+        encoder_input_length=encoder_input_length, encoders=encoders, encoder_inputs=encoder_inputs,
+        training=training)
+
+    outputs, attention_weights, states, _, samples, beam_fun, initial_data = attention_decoder(
+        attention_states=attention_states, initial_state=encoder_state, feed_previous=feed_previous,
+        decoder_inputs=targets[0][:, :-1], encoder_input_length=encoder_input_length,
+        decoder=decoders[0], training=training, encoders=encoders
+    )
+
+    target_weights = get_weights(targets[0][:, 1:], utils.EOS_ID, include_first_eos=True)
+    xent_loss = sequence_loss(logits=outputs, targets=targets[0][:, 1:], weights=target_weights)
+
+    target_weights = get_weights(targets[1][:, 1:], utils.EOS_ID, include_first_eos=True)
+    target_length = [tf.to_int32(tf.reduce_sum(target_weights, axis=1))]
+
+    reconstructed_outputs, reconstructed_weights, _, _, _, _, _ = attention_decoder(
+        attention_states=[states], initial_state=states[:,-1,:], feed_previous=feed_previous,
+        decoder_inputs=targets[1][:, :-1], encoder_input_length=target_length,
+        decoder=decoders[1], training=training, encoders=decoders[:1]
+    )
+
+    target_weights = get_weights(targets[1][:, 1:], utils.EOS_ID, include_first_eos=True)
+    xent_loss += reconstruction_weight * sequence_loss(logits=reconstructed_outputs, targets=targets[1][:, 1:],
+                                                       weights=target_weights)
+
+    # FIXME
+    weight_loss = tf.matmul(reconstructed_weights, attention_weights) - tf.eye(tf.shape(reconstructed_weights)[1])
+    weight_loss = tf.norm(weight_loss) / tf.to_float(tf.shape(reconstructed_weights)[0])
+    xent_loss += reconstruction_attn_weight * weight_loss
+
+    attention_weights = [attention_weights, reconstructed_weights]
+    losses = [xent_loss, None, None]
+    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
+
+
 def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
                             chaining_strategy=None, align_encoder_id=0, chaining_non_linearity=False,
                             chaining_loss_ratio=1.0, chaining_stop_gradient=False, training=True, **kwargs):
