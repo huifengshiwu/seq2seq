@@ -12,6 +12,7 @@ batch_size: 64
 batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 5.0
+weight_scale: null
 
 steps_per_checkpoint: 1000
 steps_per_eval: 1000

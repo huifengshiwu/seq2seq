@@ -149,6 +149,10 @@ class Seq2SeqModel(object):
         self.params = params
 
         gradients = tf.gradients(loss, params)
+
+        # from translate.memory_saving_gradients import gradients as mem_save_gradients
+        # gradients = mem_save_gradients(loss, params, checkpoints='speed')  # try 'memory'
+
         if max_gradient_norm:
             gradients, _ = tf.clip_by_global_norm(gradients, max_gradient_norm)
 

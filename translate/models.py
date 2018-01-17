@@ -365,74 +365,50 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
     return encoder_outputs, encoder_state, new_encoder_input_length
 
 
-def compute_energy(hidden, state, attn_size, attn_keep_prob=None, pervasive_dropout=False, layer_norm=False,
-                   mult_attn=False, position_bias=False, time=None, input_length=None, **kwargs):
-    if attn_keep_prob is not None:
-        state_noise_shape = [1, tf.shape(state)[1]] if pervasive_dropout else None
-        state = tf.nn.dropout(state, keep_prob=attn_keep_prob, noise_shape=state_noise_shape)
-        hidden_noise_shape = [1, 1, tf.shape(hidden)[2]] if pervasive_dropout else None
-        hidden = tf.nn.dropout(hidden, keep_prob=attn_keep_prob, noise_shape=hidden_noise_shape)
-
-    if mult_attn:
-        state = dense(state, attn_size, use_bias=False, name='state')
-        hidden = dense(hidden, attn_size, use_bias=False, name='hidden')
-        return tf.einsum('ijk,ik->ij', hidden, state)
-    else:
-        y = dense(state, attn_size, use_bias=not layer_norm, name='W_a')
-        y = tf.expand_dims(y, axis=1)
-
-        if layer_norm:
-            y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
-            hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
-
-        y += dense(hidden, attn_size, use_bias=False, name='U_a')
-
-        if position_bias and input_length is not None and time is not None:
-            batch_size = tf.shape(hidden)[0]
-            time_steps = tf.shape(hidden)[1]
-
-            src_pos = tf.tile(tf.expand_dims(tf.range(0, time_steps), axis=0), [batch_size, 1])
-            trg_pos = tf.tile(tf.reshape(time, [1, 1]), [batch_size, time_steps])
-            src_len = tf.tile(tf.expand_dims(input_length, axis=1), [1, time_steps])
-            pos_feats = tf.to_float(tf.stack([src_pos, trg_pos, src_len], axis=2))
-            pos_feats = tf.log(1 + pos_feats)
-
-            y += dense(pos_feats, attn_size, use_bias=False, name='P_a')
-
-        v = get_variable('v_a', [attn_size])
-        return tf.reduce_sum(v * tf.tanh(y), axis=2)
-
-
-def compute_energy_with_filter(hidden, state, prev_weights, attn_filters, attn_filter_length,
-                               **kwargs):
-    hidden = tf.expand_dims(hidden, 2)
-
+def compute_energy(hidden, state, encoder, time=None, input_length=None, prev_weights=None, **kwargs):
     batch_size = tf.shape(hidden)[0]
     time_steps = tf.shape(hidden)[1]
-    attn_size = hidden.get_shape()[3].value
 
-    filter_shape = [attn_filter_length * 2 + 1, 1, 1, attn_filters]
-    filter_ = get_variable('filter', filter_shape)
-    u = get_variable('U', [attn_filters, attn_size])
-    prev_weights = tf.reshape(prev_weights, tf.stack([batch_size, time_steps, 1, 1]))
-    conv = tf.nn.conv2d(prev_weights, filter_, [1, 1, 1, 1], 'SAME')
-    shape = tf.stack([tf.multiply(batch_size, time_steps), attn_filters])
-    conv = tf.reshape(conv, shape)
-    z = tf.matmul(conv, u)
-    z = tf.reshape(z, tf.stack([batch_size, time_steps, 1, attn_size]))
+    if encoder.attn_keep_prob is not None:
+        state_noise_shape = [1, tf.shape(state)[1]] if encoder.pervasive_dropout else None
+        state = tf.nn.dropout(state, keep_prob=encoder.attn_keep_prob, noise_shape=state_noise_shape)
+        hidden_noise_shape = [1, 1, tf.shape(hidden)[2]] if encoder.pervasive_dropout else None
+        hidden = tf.nn.dropout(hidden, keep_prob=encoder.attn_keep_prob, noise_shape=hidden_noise_shape)
 
-    y = dense(state, attn_size, use_bias=True, name='y')
-    y = tf.reshape(y, [-1, 1, 1, attn_size])
+    if encoder.mult_attn:
+        state = dense(state, encoder.attn_size, use_bias=False, name='state')
+        hidden = dense(hidden, encoder.attn_size, use_bias=False, name='hidden')
+        return tf.einsum('ijk,ik->ij', hidden, state)
 
-    k = get_variable('W', [attn_size, attn_size])
-    # dot product between tensors requires reshaping
-    hidden = tf.reshape(hidden, tf.stack([tf.multiply(batch_size, time_steps), attn_size]))
-    f = tf.matmul(hidden, k)
-    f = tf.reshape(f, tf.stack([batch_size, time_steps, 1, attn_size]))
+    y = dense(state, encoder.attn_size, use_bias=not encoder.layer_norm, name='W_a')
+    y = tf.expand_dims(y, axis=1)
 
-    v = get_variable('V', [attn_size])
-    s = f + y + z
-    return tf.reduce_sum(v * tf.tanh(s), [2, 3])
+    if encoder.layer_norm:
+        y = tf.contrib.layers.layer_norm(y, scope='layer_norm_state')
+        hidden = tf.contrib.layers.layer_norm(hidden, center=False, scope='layer_norm_hidden')
+
+    y += dense(hidden, encoder.attn_size, use_bias=False, name='U_a')
+
+    if encoder.position_bias and input_length is not None and time is not None:
+        src_pos = tf.tile(tf.expand_dims(tf.range(0, time_steps), axis=0), [batch_size, 1])
+        trg_pos = tf.tile(tf.reshape(time, [1, 1]), [batch_size, time_steps])
+        src_len = tf.tile(tf.expand_dims(input_length, axis=1), [1, time_steps])
+        pos_feats = tf.to_float(tf.stack([src_pos, trg_pos, src_len], axis=2))
+        pos_feats = tf.log(1 + pos_feats)
+
+        y += dense(pos_feats, encoder.attn_size, use_bias=False, name='P_a')
+
+    if encoder.attn_filters:
+        filter_shape = [encoder.attn_filter_length * 2 + 1, 1, 1, encoder.attn_filters]
+        filter_ = get_variable('filter', filter_shape)
+        prev_weights = tf.reshape(prev_weights, tf.stack([batch_size, time_steps, 1, 1]))
+        conv = tf.nn.conv2d(prev_weights, filter_, [1, 1, 1, 1], 'SAME')
+        conv = tf.squeeze(conv, axis=2)
+        
+        y += dense(conv, encoder.attn_size, use_bias=False, name='C_a')
+
+    v = get_variable('v_a', [encoder.attn_size])
+    return tf.reduce_sum(v * tf.tanh(y), axis=2)
 
 
 def global_attention(state, hidden_states, encoder, encoder_input_length, scope=None, context=None, **kwargs):
@@ -440,20 +416,8 @@ def global_attention(state, hidden_states, encoder, encoder_input_length, scope=
         if context is not None and encoder.use_context:
             state = tf.concat([state, context], axis=1)
 
-        if encoder.attn_filters:
-            e = compute_energy_with_filter(hidden_states, state, attn_size=encoder.attn_size,
-                                           attn_filters=encoder.attn_filters,
-                                           attn_filter_length=encoder.attn_filter_length,
-                                           input_length=encoder_input_length, **kwargs)
-        else:
-            e = compute_energy(hidden_states, state, attn_size=encoder.attn_size,
-                               attn_keep_prob=encoder.attn_keep_prob, pervasive_dropout=encoder.pervasive_dropout,
-                               layer_norm=encoder.layer_norm, mult_attn=encoder.mult_attn,
-                               position_bias=encoder.position_bias,
-                               input_length=encoder_input_length, **kwargs)
-
+        e = compute_energy(hidden_states, state, encoder, input_length=encoder_input_length, **kwargs)
         mask = tf.sequence_mask(encoder_input_length, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
-
         e *= mask
 
         if encoder.attn_norm_fun == 'none':
@@ -497,8 +461,7 @@ def last_state_attention(hidden_states, encoder_input_length, *args, **kwargs):
     return weighted_average, weights
 
 
-def local_attention(state, hidden_states, encoder, encoder_input_length, pos=None, scope=None,
-                    context=None, **kwargs):
+def local_attention(state, hidden_states, encoder, encoder_input_length, pos=None, scope=None, context=None, **kwargs):
     batch_size = tf.shape(state)[0]
     attn_length = tf.shape(hidden_states)[1]
 
@@ -557,8 +520,7 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
 
             mask = tf.to_float(tf.equal(m, 0.0))
 
-            e = compute_energy(hidden_states, state, attn_size=encoder.attn_size, **kwargs)
-
+            e = compute_energy(hidden_states, state, encoder.attn_size, input_length=encoder_input_length, **kwargs)
             weights = softmax(e, mask=mask)
 
             sigma = encoder.attn_window_size / 2
@@ -725,9 +687,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
             state = tf.concat([state, context], axis=1)
 
         if decoder.hidden_state_scaling:
-            attention_states[0] = attention_states[0] * decoder.hidden_state_scaling  # FIXME
+            attention_states_ = [states * decoder.hidden_state_scaling for states in attention_states]
+        else:
+            attention_states_ = attention_states
 
-        parameters = dict(hidden_states=attention_states, encoder_input_length=encoder_input_length,
+        parameters = dict(hidden_states=attention_states_, encoder_input_length=encoder_input_length,
                           encoders=encoders, aggregation_method=decoder.aggregation_method)
         context, new_weights = multi_attention(state, time=time, pos=pos_, prev_weights=prev_weights_, **parameters)
 
@@ -986,8 +950,8 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     if encoder_input_length is None:
         encoder_input_length = []
         for encoder_inputs_ in encoder_inputs:
-            weights = get_weights(encoder_inputs_, utils.EOS_ID, include_first_eos=True)
-            encoder_input_length.append(tf.to_int32(tf.reduce_sum(weights, axis=1)))
+            mask = get_weights(encoder_inputs_, utils.EOS_ID, include_first_eos=True)
+            encoder_input_length.append(tf.to_int32(tf.reduce_sum(mask, axis=1)))
 
     parameters = dict(encoders=encoders, decoder=decoder, encoder_inputs=encoder_inputs,
                       feed_argmax=feed_argmax, training=training)
@@ -1013,8 +977,36 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     reinforce_loss = sequence_loss(logits=outputs, targets=samples, weights=reinforce_weights,
                                    rewards=baseline_rewards)
 
-    target_weights = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
-    xent_loss = sequence_loss(logits=outputs, targets=targets[:, 1:], weights=target_weights)
+    trg_mask = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
+    xent_loss = sequence_loss(logits=outputs, targets=targets[:, 1:], weights=trg_mask)
+
+    if decoder.monotonicity_weight:
+        monotonicity_dist = decoder.monotonicity_dist or 1.0
+
+        batch_size = tf.shape(attention_weights)[0]
+        src_len = tf.shape(attention_weights)[2]
+        trg_len = tf.shape(attention_weights)[1]
+
+        src_indices = tf.tile(tf.reshape(tf.range(src_len), shape=[1, 1, src_len]), [batch_size, trg_len, 1])
+        trg_indices = tf.tile(tf.reshape(tf.range(trg_len), shape=[1, trg_len, 1]), [batch_size, 1, src_len])
+
+        source_length = encoder_input_length[0]
+        target_length = tf.to_int32(tf.reduce_sum(trg_mask, axis=1))
+
+        true_src_len = tf.reshape(source_length, shape=[batch_size, 1, 1])
+        true_trg_len = tf.reshape(target_length, shape=[batch_size, 1, 1])
+
+        src_mask = tf.to_float(tf.sequence_mask(source_length, maxlen=src_len))
+        mask = tf.matmul(tf.expand_dims(trg_mask, axis=2), tf.expand_dims(src_mask, axis=1))
+
+        monotonous = tf.sqrt(((true_trg_len * src_indices - true_src_len * trg_indices) ** 2)
+                             / (true_trg_len**2 + true_src_len**2))
+        monotonous = tf.to_float(monotonous < monotonicity_dist)
+
+        attn_loss = (attention_weights - tf.stop_gradient(monotonous)) * tf.stop_gradient(mask)
+        attn_loss = tf.norm(attn_loss) / tf.to_float(batch_size) / monotonicity_dist
+        xent_loss += decoder.monotonicity_weight * attn_loss
+
     losses = [xent_loss, reinforce_loss, baseline_loss_]
 
     return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
@@ -1055,10 +1047,15 @@ def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, 
     xent_loss += reconstruction_weight * sequence_loss(logits=reconstructed_outputs, targets=targets[1][:, 1:],
                                                        weights=target_weights)
 
-    # FIXME
-    weight_loss = tf.matmul(reconstructed_weights, attention_weights) - tf.eye(tf.shape(reconstructed_weights)[1])
-    weight_loss = tf.norm(weight_loss) / tf.to_float(tf.shape(reconstructed_weights)[0])
-    xent_loss += reconstruction_attn_weight * weight_loss
+    max_src_len = tf.shape(reconstructed_weights)[1]
+    batch_size = tf.shape(reconstruction_weight)[0]
+
+    attn_loss = tf.matmul(reconstructed_weights, attention_weights) - tf.eye(max_src_len)
+    src_mask = tf.sequence_mask(encoder_input_length[0], maxlen=max_src_len)
+    attn_loss *= src_mask
+
+    attn_loss = tf.norm(attn_loss) / tf.to_float(batch_size)
+    xent_loss += reconstruction_attn_weight * attn_loss
 
     attention_weights = [attention_weights, reconstructed_weights]
     losses = [xent_loss, None, None]

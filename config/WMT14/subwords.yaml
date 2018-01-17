@@ -10,6 +10,7 @@ data_dir: data/WMT14
 max_len: 60
 model_dir: models/WMT14/subwords
 max_train_size: 1000000
+vocab_prefix: vocab.concat
 
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
@@ -32,11 +33,14 @@ final_state: last_both
 weight_scale: 0.01
 
 encoders:
-  - name: jsub.en
+  - name: joint
+    ext: jsub.en
 
 decoders:
-  - name: jsub.fr
+  - name: joint
+    ext: jsub.fr
     conditional_rnn: True
     pred_deep_layer: True
+    tie_embeddings: False
 
 orthogonal_init: True

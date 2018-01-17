@@ -24,3 +24,8 @@ scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize 
 --dev-corpus ${raw_data}/ntst1213.fr-en --dev-prefix dev.jsub \
 --test-corpus ${raw_data}/ntst14.fr-en --test-prefix test.jsub \
 --shuffle --seed 1234 --output train.jsub --vocab-prefix vocab.jsub
+
+cat ${data_dir}/train.jsub.{fr,en} > ${data_dir}/train.concat.jsub
+scripts/prepare-data.py ${data_dir}/train concat.jsub ${data_dir} --vocab-size 0
+cp ${data_dir}/vocab.concat.jsub ${data_dir}/vocab.concat.jsub.fr ${data_dir}/vocab.concat.jsub.en
+rm ${data_dir}/train.concat.*

@@ -30,7 +30,7 @@ conditional_rnn: True
 conv_filters: [16, 16]
 conv_size: [3, 3]
 conv_strides: [2, 2]
-conv_activation: relu
+conv_activation: null
 input_layers: [256, 128]
 input_layer_activation: tanh
 final_state: concat_last

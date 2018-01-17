@@ -13,6 +13,7 @@ batch_size: 64
 batch_mode: standard
 read_ahead: 10
 max_gradient_norm: 5.0
+weight_scale: null
 
 steps_per_checkpoint: 500
 steps_per_eval: 500
@@ -33,7 +34,7 @@ encoders:
     conv_filters: [16, 16]
     conv_size: [3, 3]
     conv_strides: [2, 2]
-    conv_activation: relu
+    conv_activation: null
     binary: True
     max_len: 600
     input_layers: [256, 128]
