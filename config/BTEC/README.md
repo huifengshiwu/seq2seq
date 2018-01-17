@@ -28,3 +28,30 @@ echo "export PYTHONPATH=/usr/local/python_packages/:\$PYTHONPATH" >> ~/.bashrc
 echo "export LD_LIBRARY_PATH=/usr/local/lib/:\$LD_LIBRARY_PATH" >> ~/.bashrc
 echo "export YAAFE_PATH=/usr/local/yaafe_extensions" >> ~/.bashrc
 ~~~
+
+## Pre-process your data
+
+Here is a dummy example of audio data pre-processing with the BTEC corpus (please send me an email if you'd like to get the audio data)
+~~~
+train_audio_data=raw_data/BTEC_train
+test_audio_data=raw_data/BTEC_test
+dev_audio_data=raw_data/BTEC_dev
+raw_data=raw_data/BTEC
+
+data_dir=data/BTEC
+ls ${train_audio_data}/*.wav -v | scripts/speech/extract-audio-features.py -o ${data_dir}/train.feats41
+ls ${dev_audio_data}/*.wav -v | scripts/speech/extract-audio-features.py -o ${data_dir}/dev.feats41
+ls ${test_audio_data}/*.wav -v | scripts/speech/extract-audio-features.py -o ${data_dir}/test.feats41
+
+scripts/prepare-data.py ${raw_data} train fr en ${data_dir} --no-tokenize --lowercase --vocab-size 0 --test-corpus test --dev-corpus dev
+~~~
+
+where `raw_data/BTEC_train` contains a wav file for each line in the training corpus. These files should be named so that their alphanumerical order is the same as the corresponding lines in `raw_data/BTEC/train.{fr,en}`. Check the output of the `ls -v` command to see if it gets the order right.
+
+The `scripts/speech/extract-audio-features.py` depends on Yaafe. It assumes that your audio files use a sample rate of 16 kHz. You'll need to modify the `sample_rate`, `step_size` and `block_size` variables accordingly if you're using a different sample rate. If you want to produce more features, you can change the `mfcc_coeffs` and `mfcc_filters` variables. If you want to get the first-order and second-order derivatives (and get features of size 123 instead of 41), you can use the `--derivatives` argument.
+
+The text pre-processing here assumes that the raw data is already tokenized, remove the `--no-tokenize` parameter if this is not the case. The `--vocab-size 0` option sets no limit to the vocabulary size. With larger corpora, you may want to set a limit there (e.g., 30000). You can also produce character-level vocabularies with the following command:
+
+~~~
+scripts/prepare-data.py ${raw_data} train fr en ${data_dir} --mode vocab --character-level --vocab-size 0 --vocab-prefix vocab.char
+~~~
