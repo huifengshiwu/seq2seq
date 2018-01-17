@@ -1,0 +1,35 @@
+label: 'IWSLT14 Basic'
+description: "IWSLT14 basic model"
+
+cell_size: 256
+attn_size: 256
+embedding_size: 128
+
+bidir: True
+cell_type: LSTM
+weight_scale: 0.1
+
+data_dir: data/IWSLT14
+model_dir: models/IWSLT14/basic
+batch_size: 32
+
+optimizer: adam
+learning_rate: 0.001
+
+steps_per_checkpoint: 2000
+steps_per_eval: 2000
+
+max_gradient_norm: 1.0
+batch_mode: standard
+read_ahead: 20
+max_epochs: 40
+
+encoders:
+  - name: de
+    max_len: 45
+    final_state: last_both
+
+decoders:
+  - name: en
+    max_len: 47
+

@@ -6,16 +6,16 @@ attn_size: 1000
 embedding_size: 620
 cell_type: GRU
 
-data_dir: data/WMT14
+data_dir: data/WMT14_en_de
 max_len: 60
-model_dir: models/WMT14/subwords
+model_dir: models/WMT14_en_de/subwords
 max_train_size: 1000000
 vocab_prefix: vocab.concat
 
 steps_per_checkpoint: 10000
 steps_per_eval: 10000
 keep_best: 1
-max_to_keep: 8
+max_to_keep: 1
 
 optimizer: adam
 learning_rate: 0.0002
@@ -23,23 +23,31 @@ batch_size: 80
 batch_mode: standard
 read_ahead: 20
 max_gradient_norm: 1.0
-max_epochs: 5
+max_epochs: 10
 learning_rate_decay_factor: 0.5
-decay_every_n_epoch: 0.5
+decay_every_n_epoch: 1.0
 
 attention_type: global
 final_state: last_both
 
-weight_scale: 0.01
-
 encoders:
   - name: joint
-    ext: jsub.en
+    ext: 60k.en
+    position_bias: True
 
 decoders:
   - name: joint
-    ext: jsub.fr
+    ext: 60k.de
     conditional_rnn: True
     pred_deep_layer: True
 
+embedding_weight_scale: 0.1
+weight_scale: null
 orthogonal_init: True
+
+use_dropout: True
+pervasive_dropout: True
+rnn_input_dropout: 0.2
+attn_dropout: 0.2
+embedding_dropout: 0.2
+initial_state_dropout: 0.2

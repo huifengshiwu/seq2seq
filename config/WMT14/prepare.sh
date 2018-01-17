@@ -23,7 +23,7 @@ scripts/prepare-data.py ${raw_data}/WMT14.fr-en fr en ${data_dir} --no-tokenize 
 --subwords --bpe-path ${data_dir}/bpe.joint \
 --dev-corpus ${raw_data}/ntst1213.fr-en --dev-prefix dev.jsub \
 --test-corpus ${raw_data}/ntst14.fr-en --test-prefix test.jsub \
---shuffle --seed 1234 --output train.jsub --vocab-prefix vocab.jsub
+--shuffle --seed 1234 --output train.jsub --vocab-prefix vocab.jsub --vocab-size 0
 
 cat ${data_dir}/train.jsub.{fr,en} > ${data_dir}/train.concat.jsub
 scripts/prepare-data.py ${data_dir}/train concat.jsub ${data_dir} --vocab-size 0
