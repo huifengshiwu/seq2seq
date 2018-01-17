@@ -50,8 +50,23 @@ where `raw_data/BTEC_train` contains a wav file for each line in the training co
 
 The `scripts/speech/extract-audio-features.py` depends on Yaafe. It assumes that your audio files use a sample rate of 16 kHz. You'll need to modify the `sample_rate`, `step_size` and `block_size` variables accordingly if you're using a different sample rate. If you want to produce more features, you can change the `mfcc_coeffs` and `mfcc_filters` variables. If you want to get the first-order and second-order derivatives (and get features of size 123 instead of 41), you can use the `--derivatives` argument.
 
-The text pre-processing here assumes that the raw data is already tokenized, remove the `--no-tokenize` parameter if this is not the case. The `--vocab-size 0` option sets no limit to the vocabulary size. With larger corpora, you may want to set a limit there (e.g., 30000). You can also produce character-level vocabularies with the following command:
+The text pre-processing here assumes that the raw data is already tokenized, remove the `--no-tokenize` parameter if this is not the case. The `--vocab-size 0` option sets no limit to the vocabulary size. With larger datasets, you may want to set a limit there (e.g., 30000). You can also produce character-level vocabularies with the following command:
 
 ~~~
 scripts/prepare-data.py ${raw_data} train fr en ${data_dir} --mode vocab --character-level --vocab-size 0 --vocab-prefix vocab.char
 ~~~
+
+## Configuration files
+
+Examples of configuration files for ASR and AST are: `config/BTEC/ASR/baseline-char.yaml` and `config/BTEC/AST/baseline-char.yaml`.
+You'll need to modify the `data`, `model`, `data_prefix` and `vocab_prefix` parameters. Also, you should set the right `name`  for the `encoders` and `decoders` parameters (it should be the same as the source and target extensions).
+
+A very important parameter for ASR and AST is the `max_len` parameters (specific to each encoder and decoder). It defines the maximum length of the input and output sequences. Training time and memory usage depend on this limit. Because audio sequences are very long (1 frame every 10 ms), training can take a lot of memory.
+
+The following command may come in handy:
+~~~
+filename=data/BTEC/train.feats41
+python3 -c "from translate.utils import read_binary_features as read; l = [len(v[0]) for v in read('${filename}')]; print(sorted(l)[len(l)*90//100-1])"
+~~~
+
+It prints the minimum number of audio frames to cover 90% of the training corpus. Use the `scripts/stats.py` to obtain length statistics on the text side of the corpus.
