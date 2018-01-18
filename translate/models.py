@@ -944,7 +944,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, align_encoder_id=0,
                     encoder_input_length=None, feed_argmax=True, rewards=None, use_baseline=True,
                     training=True, global_step=None,
-                    monotonicity_weight=None, monotonicity_dist=None, mononicity_decay=None, **kwargs):
+                    monotonicity_weight=None, monotonicity_dist=None, monotonicity_decay=None, **kwargs):
     decoder = decoders[0]
     targets = targets[0]  # single decoder
 
@@ -1005,10 +1005,12 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
         non_monotonous = (1 - monotonous) * mask
         attn_loss = tf.reduce_sum(attention_weights * tf.stop_gradient(non_monotonous)) / tf.to_float(batch_size)
 
-        if mononicity_decay:
-            decay = tf.stop_gradient(0.5 ** (global_step / mononicity_decay))
+        if monotonicity_decay:
+            decay = tf.stop_gradient(0.5 ** (tf.to_float(global_step) / monotonicity_decay))
         else:
             decay = 1.0
+
+        attn_loss = tf.Print(attn_loss, [monotonicity_weight * decay, attn_loss], message='decay=')
 
         xent_loss += monotonicity_weight * decay * attn_loss
 
