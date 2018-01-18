@@ -1010,8 +1010,6 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
         else:
             decay = 1.0
 
-        attn_loss = tf.Print(attn_loss, [monotonicity_weight * decay, attn_loss], message='decay=')
-
         xent_loss += monotonicity_weight * decay * attn_loss
 
     losses = [xent_loss, reinforce_loss, baseline_loss_]
