@@ -5,7 +5,7 @@ Attention-based sequence to sequence learning
 
 * [TensorFlow 1.2+ for Python 3](https://www.tensorflow.org/get_started/os_setup.html)
 * YAML and Matplotlib modules for Python 3: `sudo apt-get install python3-yaml python3-matplotlib`
-
+* A recent NVIDIA GPU
 
 ## How to use
 
@@ -51,6 +51,10 @@ This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.067
 | 28.32 | 25.33 | 26.74 | 44k   |
 
 The model is available for download [here](https://drive.google.com/file/d/1-RZ-uNaJvn2UuQOmYEjyQl7435CCrrB6/view?usp=sharing).
+
+## Audio pre-processing
+If you want to use the toolkit for Automatic Speech Recognition (ASR) or Automatic Speech Translation (AST), then you'll need to pre-process your audio files accordingly.
+This [README](https://github.com/eske/seq2seq/tree/master/config/BTEC) details how it can be done. You'll need to install the **Yaafe** library, and use `scripts/speech/extract-audio-features.py` to extract MFCCs from a set of wav files.
 
 ## Features
 * **YAML configuration files**
