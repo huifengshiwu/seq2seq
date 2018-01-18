@@ -390,9 +390,9 @@ def compute_energy(hidden, state, encoder, time=None, input_length=None, prev_we
     y += dense(hidden, encoder.attn_size, use_bias=False, name='U_a')
 
     if encoder.position_bias and input_length is not None and time is not None:
-        src_pos = tf.tile(tf.expand_dims(tf.range(0, time_steps), axis=0), [batch_size, 1])
+        src_pos = tf.tile(tf.expand_dims(tf.range(time_steps), axis=0), [batch_size, 1])
         trg_pos = tf.tile(tf.reshape(time, [1, 1]), [batch_size, time_steps])
-        src_len = tf.tile(tf.expand_dims(input_length, axis=1), [1, time_steps])
+        src_len = tf.tile(tf.expand_dims(input_length, axis=1), [1, time_steps]) # - 1
         pos_feats = tf.to_float(tf.stack([src_pos, trg_pos, src_len], axis=2))
         pos_feats = tf.log(1 + pos_feats)
 
@@ -943,7 +943,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
 
 def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, align_encoder_id=0,
                     encoder_input_length=None, feed_argmax=True, rewards=None, use_baseline=True,
-                    training=True, **kwargs):
+                    training=True, global_step=None,
+                    monotonicity_weight=None, monotonicity_dist=None, mononicity_decay=None, **kwargs):
     decoder = decoders[0]
     targets = targets[0]  # single decoder
 
@@ -980,8 +981,8 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
     trg_mask = get_weights(targets[:, 1:], utils.EOS_ID, include_first_eos=True)
     xent_loss = sequence_loss(logits=outputs, targets=targets[:, 1:], weights=trg_mask)
 
-    if decoder.monotonicity_weight:
-        monotonicity_dist = decoder.monotonicity_dist or 1.0
+    if monotonicity_weight:
+        monotonicity_dist = monotonicity_dist or 1.0
 
         batch_size = tf.shape(attention_weights)[0]
         src_len = tf.shape(attention_weights)[2]
@@ -992,9 +993,8 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
 
         source_length = encoder_input_length[0]
         target_length = tf.to_int32(tf.reduce_sum(trg_mask, axis=1))
-
-        true_src_len = tf.reshape(source_length, shape=[batch_size, 1, 1])
-        true_trg_len = tf.reshape(target_length, shape=[batch_size, 1, 1])
+        true_src_len = tf.reshape(source_length, shape=[batch_size, 1, 1]) - 1
+        true_trg_len = tf.reshape(target_length, shape=[batch_size, 1, 1]) - 1
 
         src_mask = tf.to_float(tf.sequence_mask(source_length, maxlen=src_len))
         mask = tf.matmul(tf.expand_dims(trg_mask, axis=2), tf.expand_dims(src_mask, axis=1))
@@ -1002,10 +1002,18 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
         monotonous = tf.sqrt(((true_trg_len * src_indices - true_src_len * trg_indices) ** 2)
                              / (true_trg_len**2 + true_src_len**2))
         monotonous = tf.to_float(monotonous < monotonicity_dist)
+        non_monotonous = (1 - monotonous) * mask
 
-        attn_loss = (attention_weights - tf.stop_gradient(monotonous)) * tf.stop_gradient(mask)
-        attn_loss = tf.norm(attn_loss) / tf.to_float(batch_size) / monotonicity_dist
-        xent_loss += decoder.monotonicity_weight * attn_loss
+        attention_weights += non_monotonous
+
+        attn_loss = tf.reduce_sum(attention_weights * tf.stop_gradient(non_monotonous)) / tf.to_float(batch_size)
+
+        if mononicity_decay:
+            decay = tf.stop_gradient(0.5 ** (global_step / mononicity_decay))
+        else:
+            decay = 1.0
+
+        xent_loss += monotonicity_weight * decay * attn_loss
 
     losses = [xent_loss, reinforce_loss, baseline_loss_]
 

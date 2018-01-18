@@ -14,13 +14,14 @@ cat ${raw_data}/newstest2014.en > ${data_dir}/test.en
 cat ${raw_data}/newstest2015.de > ${data_dir}/test.2015.de
 cat ${raw_data}/newstest2015.en > ${data_dir}/test.2015.en
 
-size=60000
+for size in 30000 60000
+do
 name=$(( size / 1000 ))k
 
 cat ${raw_data}/train.{de,en} > ${data_dir}/train.concat
 scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.${name} -s ${size}
-cp ${data_dir}/bpe.joint ${data_dir}/bpe.${name}.de
-cp ${data_dir}/bpe.joint ${data_dir}/bpe.${name}.en
+cp ${data_dir}/bpe.${name} ${data_dir}/bpe.${name}.de
+cp ${data_dir}/bpe.${name} ${data_dir}/bpe.${name}.en
 rm ${data_dir}/train.concat
 
 scripts/prepare-data.py ${data_dir}/train de en ${data_dir} --no-tokenize \
@@ -37,3 +38,4 @@ scripts/prepare-data.py ${data_dir}/train concat.${name} ${data_dir} --vocab-siz
 cp ${data_dir}/vocab.concat.${name} ${data_dir}/vocab.concat.${name}.de
 cp ${data_dir}/vocab.concat.${name} ${data_dir}/vocab.concat.${name}.en
 rm ${data_dir}/train.concat.*
+done

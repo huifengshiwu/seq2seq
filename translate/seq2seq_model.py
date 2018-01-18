@@ -14,7 +14,7 @@ class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, use_dropout=False,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False,
                  len_normalization=1.0, name=None, chained_encoders=False, pred_edits=False, baseline_step=None,
-                 use_baseline=True, reverse_input=False, moving_average=None, reconstruction_decoders=False, **kwargs):
+                 use_baseline=True, reverse_input=False, reconstruction_decoders=False, **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.temperature = self.decoders[0].temperature
@@ -84,7 +84,8 @@ class Seq2SeqModel(object):
 
         tensors = architecture(encoders, decoders, self.encoder_inputs, self.targets, self.feed_previous,
                                encoder_input_length=self.encoder_input_length, feed_argmax=self.feed_argmax,
-                               rewards=self.rewards, use_baseline=use_baseline, training=self.training, **kwargs)
+                               rewards=self.rewards, use_baseline=use_baseline, training=self.training,
+                               global_step=self.global_step, **kwargs)
 
         (self.losses, self.outputs, self.encoder_state, self.attention_states, self.attention_weights,
          self.samples, self.beam_fun, self.initial_data) = tensors
