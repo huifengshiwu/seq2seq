@@ -1003,9 +1003,6 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
                              / (true_trg_len**2 + true_src_len**2))
         monotonous = tf.to_float(monotonous < monotonicity_dist)
         non_monotonous = (1 - monotonous) * mask
-
-        attention_weights += non_monotonous
-
         attn_loss = tf.reduce_sum(attention_weights * tf.stop_gradient(non_monotonous)) / tf.to_float(batch_size)
 
         if mononicity_decay:
