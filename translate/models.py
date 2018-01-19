@@ -535,7 +535,7 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
         return weighted_average, weights
 
 
-def attention(encoder, **kwargs):
+def attention(encoder, scope=None, **kwargs):
     attention_functions = {
         'global': global_attention,
         'local': local_attention,
@@ -543,10 +543,28 @@ def attention(encoder, **kwargs):
         'average': average_attention,
         'last_state': last_state_attention
     }
-
     attention_function = attention_functions.get(encoder.attention_type, global_attention)
 
-    return attention_function(encoder=encoder, **kwargs)
+    context_vectors = []
+    weights = []
+
+    attn_heads = encoder.attn_heads or 1
+    scope = scope or 'attention_{}'.format(encoder.name)
+    for i in range(attn_heads):
+        scope_ = scope if i == 0 else scope + '_{}'.format(i + 1)
+
+        context_vector, weights_ = attention_function(encoder=encoder, scope=scope_, **kwargs)
+        context_vectors.append(context_vector)
+        weights.append(weights_)
+
+    context_vector = tf.concat(context_vectors, axis=-1)
+    weights = sum(weights) / len(weights)
+
+    if encoder.attn_mapping:
+        with tf.variable_scope(scope):
+            context_vector = dense(context_vector, encoder.attn_mapping, use_bias=False, name='output')
+
+    return context_vector, weights
 
 
 def multi_attention(state, hidden_states, encoders, encoder_input_length, pos=None, aggregation_method='sum',

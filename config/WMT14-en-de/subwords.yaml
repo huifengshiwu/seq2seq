@@ -12,8 +12,8 @@ model_dir: models/WMT14_en_de/subwords
 max_train_size: 1000000
 vocab_prefix: vocab.concat
 
-steps_per_checkpoint: 10000
-steps_per_eval: 10000
+steps_per_checkpoint: 5000
+steps_per_eval: 5000
 keep_best: 1
 max_to_keep: 1
 
@@ -25,20 +25,19 @@ read_ahead: 20
 max_gradient_norm: 1.0
 max_epochs: 10
 learning_rate_decay_factor: 0.5
-decay_every_n_epoch: 1.0
+decay_every_n_epoch: 1
 
 attention_type: global
 final_state: last_both
 
 encoders:
   - name: joint
-    ext: 60k.en
+    ext: 30k.en
     position_bias: True
 
 decoders:
   - name: joint
-    ext: 60k.de
-    conditional_rnn: True
+    ext: 30k.de
     pred_deep_layer: True
 
 embedding_weight_scale: 0.1

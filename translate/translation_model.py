@@ -187,7 +187,7 @@ class TranslationModel:
                     weights_ = batch_weights[sentence_id].squeeze()
                     max_len_ = weights_.shape[1]
 
-                    if self.binary:
+                    if self.binary[0]:
                         src_tokens_ = None
                     else:
                         src_tokens_ = src_tokens[0].split()[:max_len_ - 1] + [utils._EOS]
