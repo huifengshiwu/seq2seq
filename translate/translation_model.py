@@ -354,6 +354,9 @@ class TranslationModel:
 
         # evaluation on multiple corpora
         for dev_id, (filenames_, output_, prefix) in enumerate(zip(filenames, output, self.dev_prefix)):
+            if self.ref_ext is not None and on_dev:
+                filenames_ = filenames_[:len(self.src_ext)] + filenames_[-1:]
+
             if self.dev_batches:
                 dev_batches = self.dev_batches[dev_id]
                 dev_loss = sum(self.seq2seq_model.step(batch, update_model=False).loss * len(batch)
@@ -362,53 +365,45 @@ class TranslationModel:
             else:  # TODO
                 dev_loss = 0
 
-            extensions = list(self.extensions)
-            if self.ref_ext is not None:
-                extensions.append(self.ref_ext)
+            src_lines = list(utils.read_lines(filenames_[:len(self.src_ext)], binary=self.binary[:len(self.src_ext)]))
+            trg_lines = list(utils.read_lines(filenames_[-1:]))
 
-            lines = list(utils.read_lines(filenames_, binary=self.binary))
+            assert len(trg_lines) % len(src_lines) == 0
+
+            references = []
+            ref_count = len(trg_lines) // len(src_lines)
+            for i in range(len(src_lines)):
+                ref = trg_lines[i * ref_count:(i + 1) * ref_count]
+                ref = [ref_[0].strip().replace('@@ ', '').replace('@@', '') for ref_ in ref]
+                references.append(ref)
 
             if on_dev and max_dev_size:
-                lines = lines[:max_dev_size]
+                max_size = max_dev_size
             elif not on_dev and max_test_size:
-                lines = lines[:max_test_size]
+                max_size = max_test_size
+            else:
+                max_size = len(src_lines)
+
+            src_lines = src_lines[:max_size]
+            references = references[:max_size]
 
             hypotheses = []
-            references = []
-
             output_file = None
-
             try:
                 if output_ is not None:
                     output_file = open(output_, 'w')
 
-                lines_ = list(zip(*lines))
-
-                src_sentences = list(zip(*lines_[:len(self.src_ext)]))
-                trg_sentences = list(zip(*lines_[len(self.src_ext):]))
-
-                hypothesis_iter = self.decode_batch(lines, self.batch_size, remove_unk=remove_unk,
+                hypothesis_iter = self.decode_batch(src_lines, self.batch_size, remove_unk=remove_unk,
                                                     fix_edits=fix_edits, unk_replace=unk_replace)
 
-                for i, (sources, hypothesis, reference) in enumerate(zip(src_sentences, hypothesis_iter,
-                                                                         trg_sentences)):
-                    if self.ref_ext is not None and on_dev:
-                        reference = reference[-1]
-                    else:
-                        reference = reference[0]   # single output for now
-
+                for i, hypothesis in enumerate(hypothesis_iter):
                     hypothesis, raw = hypothesis
-
                     hypotheses.append(hypothesis)
-                    references.append(reference.strip().replace('@@ ', '').replace('@@', ''))
-
                     if output_file is not None:
                         if raw_output:
                             hypothesis = raw
-
                         output_file.write(hypothesis + '\n')
                         output_file.flush()
-
             finally:
                 if output_file is not None:
                     output_file.close()
@@ -423,6 +418,11 @@ class TranslationModel:
 
             for score_function in score_functions:
                 try:
+                    if score_function != 'bleu':
+                        references_ = [ref[0] for ref in references]
+                    else:
+                        references_ = references
+
                     if score_function == 'loss':
                         score = dev_loss
                         reversed_ = True
@@ -432,7 +432,7 @@ class TranslationModel:
                             reversed_ = fun.reversed
                         except AttributeError:
                             reversed_ = False
-                        score, score_summary = fun(hypotheses, references)
+                        score, score_summary = fun(hypotheses, references_)
                         summary = summary or score_summary
 
                     scores_.append((score_function, score, reversed_))

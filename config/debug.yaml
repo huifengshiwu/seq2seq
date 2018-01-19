@@ -1,7 +1,7 @@
 label: 'BTEC baseline'
 
-cell_size: 256
-attn_size: 256
+cell_size: 128
+attn_size: 128
 embedding_size: 128
 
 bidir: True
@@ -16,8 +16,8 @@ batch_size: 32
 optimizer: adam
 learning_rate: 0.001
 
-steps_per_checkpoint: 1000
-steps_per_eval: 1000
+steps_per_checkpoint: 500
+steps_per_eval: 500
 
 batch_mode: standard
 read_ahead: 10
@@ -45,3 +45,7 @@ pervasive_dropout: True
 rnn_input_dropout: 0.2
 attention_dropout: 0.2
 word_dropout: 0.2
+
+multi_bleu: True
+ref_ext: mref.en
+dev_prefix: test1

@@ -132,15 +132,23 @@ def corpus_bleu(hypotheses, references, smoothing=False, order=4, **kwargs):
     ref_length = 0
 
     for hyp, ref in zip(hypotheses, references):
+        if isinstance(ref, str):
+            ref = [ref]
+
         hyp = hyp.split()
-        ref = ref.split()
+        ref = [ref_.split() for ref_ in ref]
 
         hyp_length += len(hyp)
-        ref_length += len(ref)
+        ref_length += min(map(len, ref), key=lambda l: (abs(l - len(hyp)), l))
 
         for i in range(order):
+            ref_ngrams = Counter()
+            for ref_ in ref:
+                c = Counter(zip(*[ref_[j:] for j in range(i + 1)]))
+                for ngram, count in c.items():
+                    ref_ngrams[ngram] = max(count, ref_ngrams[ngram])
+
             hyp_ngrams = Counter(zip(*[hyp[j:] for j in range(i + 1)]))
-            ref_ngrams = Counter(zip(*[ref[j:] for j in range(i + 1)]))
 
             total[i] += sum(hyp_ngrams.values())
             correct[i] += sum(min(count, ref_ngrams[bigram]) for bigram, count in hyp_ngrams.items())
