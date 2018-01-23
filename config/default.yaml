@@ -35,6 +35,7 @@ rnn_output_dropout: 0.0
 rnn_state_dropout: 0.0
 initial_state_dropout: 0.0
 word_dropout: 0.0
+embedding_dropout: 0.0
 input_layer_dropout: 0.0
 output_dropout: 0.0      # TODO
 use_dropout: False

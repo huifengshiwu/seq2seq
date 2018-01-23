@@ -809,13 +809,19 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
         initial_state = tf.nn.dropout(initial_state, keep_prob=decoder.initial_state_keep_prob)
 
     with tf.variable_scope(scope_name):
-        if decoder.layer_norm:
+        activation_fn = None if decoder.initial_state == 'linear' else tf.nn.tanh
+        if decoder.initial_state == 'trained':
+            initial_state = get_variable(shape=[cell_state_size], name='initial_state')
+            initial_state = tf.tile(tf.expand_dims(initial_state, axis=0), [batch_size, 1])
+        elif decoder.initial_state == 'zero':
+            initial_state = tf.zeros(shape=[batch_size, cell_state_size])
+        elif decoder.layer_norm:
             initial_state = dense(initial_state, cell_state_size, use_bias=False, name='initial_state_projection')
-            initial_state = tf.contrib.layers.layer_norm(initial_state, activation_fn=tf.nn.tanh,
+            initial_state = tf.contrib.layers.layer_norm(initial_state, activation_fn=activation_fn,
                                                          scope='initial_state_layer_norm')
         else:
             initial_state = dense(initial_state, cell_state_size, use_bias=True, name='initial_state_projection',
-                                  activation=tf.nn.tanh)
+                                  activation=activation_fn)
 
     if decoder.cell_type.lower() == 'lstm' and decoder.use_lstm_full_state:
         initial_output = initial_state
