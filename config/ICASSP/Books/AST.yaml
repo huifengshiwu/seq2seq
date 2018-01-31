@@ -1,17 +1,13 @@
 label: 'LibriSpeech AST'
 description: "Character-Level Automatic Speech Translation on LibriSpeech"
 
-data_dir: data/audiobooks
+data_dir: data/ICASSP/Books
 model_dir: models/ICASSP/Books/AST
 max_train_size: 20000
 train_prefix: train+google
 dev_prefix: [dev, dev.google]
 
-optimizer: adam
-learning_rate: 0.001
 batch_size: 32
-batch_mode: standard
-read_ahead: 10
 weight_scale: null
 
 steps_per_checkpoint: 1000

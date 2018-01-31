@@ -1,18 +1,14 @@
 label: 'LibriSpeech MT'
 description: "Character-Level Machine Translation on LibriSpeech"
 
-data_dir: data/audiobooks
+data_dir: data/ICASSP/Books
 model_dir: models/ICASSP/Books/MT
 max_train_size: 20000
 train_prefix: train+google
 dev_prefix: [dev, dev.google]
 
-optimizer: adam
-learning_rate: 0.001
 batch_size: 64
-batch_mode: standard
-read_ahead: 10
-
+weight_scale: null
 
 steps_per_checkpoint: 1000
 steps_per_eval: 1000
@@ -31,7 +27,6 @@ encoders:
     bidir_projection: True
     final_state: average
     train_initial_states: True
-    word_dropout: 0.2
 
 decoders:
   - name: char.fr
@@ -41,12 +36,12 @@ decoders:
     use_previous_word: True
     deep_layer_size: 512
     embedding_size: 128
-    max_len: 300
-    word_dropout: 0.2
+    max_len: 400
 
 use_dropout: True
 pervasive_dropout: True
-attn_dropout: 0.2
 rnn_input_dropout: 0.2
 rnn_output_dropout: 0.2
+attn_dropout: 0.2
+word_dropout: 0.2
 initial_state_dropout: 0.2

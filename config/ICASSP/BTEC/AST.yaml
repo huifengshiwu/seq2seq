@@ -1,26 +1,17 @@
 label: 'BTEC AST'
-description: "Multi-Speaker Character-Level Automatic Speech Translation on BTEC"
 
-data_dir: data/BTEC
+data_dir: data/ICASSP/BTEC
 model_dir: models/ICASSP/BTEC/AST
+train_prefix: train.concat
 max_train_size: 40000
-train_prefix: train.concat.shuf
 
-
-optimizer: adam
-learning_rate: 0.001
 batch_size: 64
-batch_mode: standard
-read_ahead: 10
-max_gradient_norm: 5.0
 weight_scale: null
 
-steps_per_checkpoint: 500
-steps_per_eval: 500
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
 max_steps: 100000
-score_function: corpus_scores
-reset: True
-
+score_function: corpus_scores_bleu
 
 cell_size: 256
 attn_size: 256
@@ -30,7 +21,6 @@ encoders:
   - name: feats41
     embedding_size: 41
     layers: 3
-    cell_size: 256
     conv_filters: [16, 16]
     conv_size: [3, 3]
     conv_strides: [2, 2]
@@ -46,14 +36,14 @@ encoders:
 decoders:
   - name: char.en
     layers: 1
-    conditional_rnn: True
-    character_level: True
-    pred_maxout_layer: False
-    pred_deep_layer: False
-    pred_embed_proj: False
-    use_previous_word: False
     embedding_size: 64
     max_len: 120
+    conditional_rnn: True
+    pred_maxout_layer: False
+    use_previous_word: False
+    pred_deep_layer: False
+    pred_embed_proj: False
+    character_level: True
 
 use_dropout: True
 pervasive_dropout: True

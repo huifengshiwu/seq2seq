@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-data_dir=data/audiobooks
+data_dir=data/ICASSP/books
 raw_data=raw_data/audiobooks
 mkdir -p ${data_dir}
 

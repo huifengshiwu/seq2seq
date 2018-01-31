@@ -1,24 +1,18 @@
 label: 'BTEC AST Multi-Task'
 description: "Multi-Task training of AST, MT and ASR models on BTEC"
 
-data_dir: data/BTEC
+data_dir: data/ICASSP/BTEC
 model_dir: models/ICASSP/BTEC/Multi_Task
 max_train_size: 40000
-train_prefix: train.concat.shuf
+train_prefix: train.concat
 
-
-optimizer: adam
-learning_rate: 0.001
 batch_size: 64
-batch_mode: standard
-read_ahead: 10
-max_gradient_norm: 5.0
+weight_scale: null
 
 steps_per_checkpoint: 500
 steps_per_eval: 500
 max_steps: 100000
-score_function: corpus_scores
-reset: True   # reset global step variable
+score_function: corpus_scores_bleu
 
 train_initial_states: False
 bidir_projection: True

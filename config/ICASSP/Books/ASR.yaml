@@ -1,17 +1,11 @@
 label: 'LibriSpeech ASR'
 description: "Character-Level Automatic Speech Recognition on LibriSpeech"
 
-data_dir: data/audiobooks
+data_dir: data/ICASSP/Books
 model_dir: models/ICASSP/Books/ASR
 max_train_size: 20000
-train_prefix: train
-dev_prefix: [dev]
 
-optimizer: adam
-learning_rate: 0.001
 batch_size: 32
-batch_mode: standard
-read_ahead: 10
 weight_scale: null
 
 steps_per_checkpoint: 1000
@@ -39,7 +33,6 @@ encoders:
     bidir_projection: True
     final_state: average
     train_initial_states: False
-    input_layer_dropout: 0.2
 
 decoders:
   - name: char.en
@@ -56,3 +49,4 @@ pervasive_dropout: True
 attn_dropout: 0.2
 rnn_input_dropout: 0.2
 initial_state_dropout: 0.2
+input_layer_dropout: 0.2

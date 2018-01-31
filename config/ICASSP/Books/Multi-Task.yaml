@@ -1,19 +1,16 @@
 label: 'LibriSpeech AST Multi-Task'
 description: "Multi-Task training of AST, MT and ASR models on LibriSpeech"
 
-data_dir: data/audiobooks
+data_dir: data/ICASSP/Books
 model_dir: models/ICASSP/Books/Multi_Task
 max_train_size: 10000
 
-optimizer: adam
-learning_rate: 0.001
 batch_size: 32
-batch_mode: standard
-read_ahead: 10
+weight_scale: null
 
 steps_per_checkpoint: 500
 steps_per_eval: 500
-max_steps: 100000
+max_steps: 500000
 
 cell_size: 512
 attn_size: 512
