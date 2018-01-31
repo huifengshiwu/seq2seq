@@ -354,7 +354,7 @@ class TranslationModel:
 
         # evaluation on multiple corpora
         for dev_id, (filenames_, output_, prefix) in enumerate(zip(filenames, output, self.dev_prefix)):
-            if self.ref_ext is not None and on_dev:
+            if self.ref_ext is not None:
                 filenames_ = filenames_[:len(self.src_ext)] + filenames_[-1:]
 
             if self.dev_batches:
@@ -366,7 +366,7 @@ class TranslationModel:
                 dev_loss = 0
 
             src_lines = list(utils.read_lines(filenames_[:len(self.src_ext)], binary=self.binary[:len(self.src_ext)]))
-            trg_lines = list(utils.read_lines(filenames_[-1:]))
+            trg_lines = list(utils.read_lines([filenames_[len(self.src_ext)]]))
 
             assert len(trg_lines) % len(src_lines) == 0
 

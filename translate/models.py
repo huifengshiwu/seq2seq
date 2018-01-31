@@ -1077,11 +1077,13 @@ def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, 
                                                        weights=target_weights)
 
     max_src_len = tf.shape(reconstructed_weights)[1]
-    batch_size = tf.shape(reconstruction_weight)[0]
+    batch_size = tf.shape(reconstructed_weights)[0]
 
     attn_loss = tf.matmul(reconstructed_weights, attention_weights) - tf.eye(max_src_len)
-    src_mask = tf.sequence_mask(encoder_input_length[0], maxlen=max_src_len)
-    attn_loss *= src_mask
+
+    src_mask = tf.sequence_mask(encoder_input_length[0], maxlen=max_src_len, dtype=tf.float32)
+    src_mask = tf.einsum('ij,ik->ijk', src_mask, src_mask)
+    attn_loss *= tf.to_float(src_mask)    # don't take padding words into account
 
     attn_loss = tf.norm(attn_loss) / tf.to_float(batch_size)
     xent_loss += reconstruction_attn_weight * attn_loss
