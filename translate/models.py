@@ -520,15 +520,17 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
 
             mask = tf.to_float(tf.equal(m, 0.0))
 
-            e = compute_energy(hidden_states, state, encoder.attn_size, input_length=encoder_input_length, **kwargs)
+            e = compute_energy(hidden_states, state, encoder, input_length=encoder_input_length, **kwargs)
             weights = softmax(e, mask=mask)
 
-            sigma = encoder.attn_window_size / 2
-            numerator = -tf.pow((idx - pos), tf.convert_to_tensor(2, dtype=tf.float32))
-            div = tf.truediv(numerator, 2 * sigma ** 2)
-            weights *= tf.exp(div)  # result of the truncated normal distribution
-            # normalize to keep a probability distribution
-            # weights /= (tf.reduce_sum(weights, axis=1, keep_dims=True) + 10e-12)
+            if encoder.attn_window_size > 0:
+                sigma = encoder.attn_window_size / 2
+                numerator = -tf.pow((idx - pos), tf.convert_to_tensor(2, dtype=tf.float32))
+                div = tf.truediv(numerator, 2 * sigma ** 2)
+
+                weights *= tf.exp(div)  # result of the truncated normal distribution
+                # normalize to keep a probability distribution
+                # weights /= (tf.reduce_sum(weights, axis=1, keep_dims=True) + 10e-12)
 
             weighted_average = tf.reduce_sum(tf.expand_dims(weights, axis=2) * hidden_states, axis=1)
 
