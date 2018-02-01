@@ -1,7 +1,7 @@
 
 ## Augmented LibriSpeech
 
-The raw corpus is available [here](https://persyval-platform.univ-grenoble-alpes.fr/DS91/detaildataset). It consists in an automatic alignment of the [LibriSpeech ASR corpus](http://www.openslr.org/12/) (English audio with transcriptions), with the [Gutenberg Project](https://www.gutenberg.org/), which distributes public domain e-books in many languages.
+The raw corpus can be downloaded [here](https://persyval-platform.univ-grenoble-alpes.fr/DS91/detaildataset). It consists in an automatic alignment of the [LibriSpeech ASR corpus](http://www.openslr.org/12/) (English audio with transcriptions), with [Project Gutenberg](https://www.gutenberg.org/), which distributes public domain e-books in many languages.
 The scripts that were used for the alignment are freely available [here](https://github.com/alicank/Translation-Augmented-LibriSpeech-Corpus).
 
 The pre-processed corpus (with MFCCs) is available [here](https://drive.google.com/open?id=1UchOtgOXYEjXxeI8WbbOH-gPdveo25AS). If you want to use it to train new models, you should extract it inside `data/ICASSP/Books`. Then, you can train a new model using the configuration files inside `config/ICASSP/Books`. For example:
