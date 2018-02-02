@@ -35,7 +35,6 @@ encoders:
 
 decoders:
   - name: char.en
-    layers: 1
     embedding_size: 64
     max_len: 120
     conditional_rnn: True
