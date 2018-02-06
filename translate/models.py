@@ -1063,10 +1063,9 @@ def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, 
     )
 
     target_weights = get_weights(targets[0][:, 1:], utils.EOS_ID, include_first_eos=True)
-    xent_loss = sequence_loss(logits=outputs, targets=targets[0][:, 1:], weights=target_weights)
-
-    target_weights = get_weights(targets[1][:, 1:], utils.EOS_ID, include_first_eos=True)
     target_length = [tf.to_int32(tf.reduce_sum(target_weights, axis=1))]
+
+    xent_loss = sequence_loss(logits=outputs, targets=targets[0][:, 1:], weights=target_weights)
 
     reconstructed_outputs, reconstructed_weights, _, _, _, _, _ = attention_decoder(
         attention_states=[states], initial_state=states[:,-1,:], feed_previous=feed_previous,
