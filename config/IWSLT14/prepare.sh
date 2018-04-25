@@ -11,33 +11,38 @@ rm -rf prep orig
 
 scripts/prepare-data.py ${data_dir}/train de en ${data_dir} --mode vocab --vocab-size 30000
 
-cat ${data_dir}/train.{de,en} > ${data_dir}/train.concat
-scripts/learn_bpe.py -i ${data_dir}/train.concat -o ${data_dir}/bpe.joint.en -s 30000
+scripts/bpe/learn_joint_bpe_and_vocab.py --input ${data_dir}/train.{de,en} -s 30000 -o ${data_dir}/bpe.joint.en --write-vocabulary ${data_dir}/bpe-vocab.de ${data_dir}/bpe-vocab.en
 cp ${data_dir}/bpe.joint.en ${data_dir}/bpe.joint.de
 
+cat ${data_dir}/train.{de,en} > ${data_dir}/train.concat
 scripts/prepare-data.py ${data_dir}/train concat ${data_dir} --mode vocab --vocab-size 0 --character-level
 mv ${data_dir}/vocab.concat ${data_dir}/vocab.char.en
 cp ${data_dir}/vocab.char.en ${data_dir}/vocab.char.de
+rm ${data_dir}/train.concat
 
-scripts/prepare-data.py ${data_dir}/train de en ${data_dir} --subwords --bpe-path ${data_dir}/bpe.joint \
---output train.jsub --dev-prefix dev.jsub --test-prefix test.jsub --test-corpus ${data_dir}/test \
---dev-corpus ${data_dir}/dev --vocab-size 0 --vocab-prefix vocab.jsub --no-tokenize
+for ext in de en
+do
+    for corpus in train dev test
+    do
+        scripts/bpe/apply_bpe.py -c ${data_dir}/bpe.joint.${ext} --vocabulary ${data_dir}/bpe-vocab.${ext} --vocabulary-threshold 10 < ${data_dir}/${corpus}.${ext} > ${data_dir}/${corpus}.jsub.${ext}
+    done
+done
+
+cat ${data_dir}/train.jsub.{en,de} > ${data_dir}/train.jsub.concat
+scripts/prepare-data.py ${data_dir}/train jsub.en jsub.de ${data_dir} --mode vocab --vocab-size 0
+scripts/prepare-data.py ${data_dir}/train.jsub concat ${data_dir} --mode vocab --vocab-size 0
+mv ${data_dir}/vocab.concat ${data_dir}/vocab.joint.jsub.en
+cp ${data_dir}/vocab.joint.jsub.{en,de}
+rm ${data_dir}/train.jsub.concat
 
 cp ${data_dir}/train.en ${data_dir}/train.char.en
 cp ${data_dir}/train.de ${data_dir}/train.char.de
 cp ${data_dir}/dev.en ${data_dir}/dev.char.en
 cp ${data_dir}/dev.de ${data_dir}/dev.char.de
 
-cat ${data_dir}/train.jsub.{en,de} > ${data_dir}/train.jsub.concat
-cp ${data_dir}/bpe.joint.en ${data_dir}/bpe.concat
-
-scripts/prepare-data.py ${data_dir}/train.jsub concat ${data_dir} --subwords --bpe-path ${data_dir}/bpe \
---vocab-size 0 --vocab-prefix vocab.jsub --mode vocab
-
-
 wget http://opus.nlpl.eu/download/TED2013/mono/TED2013.en.gz -O ${data_dir}/TED2013.en.gz
-wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.de.gz -O ${data_dir}/OpenSubtitles2018.de.gz
-wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.en.gz -O ${data_dir}/OpenSubtitles2018.en.gz
+#wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.de.gz -O ${data_dir}/OpenSubtitles2018.de.gz
+#wget http://opus.nlpl.eu/download/OpenSubtitles2018/mono/OpenSubtitles2018.en.gz -O ${data_dir}/OpenSubtitles2018.en.gz
 
 function filter {
 filename=`mktemp`
@@ -52,9 +57,7 @@ python3 ${filename}
 rm ${filename}
 }
 
-gunzip ${data_dir}/TED2013.en.gz --stdout | scripts/lowercase.perl | filter en > ${data_dir}/TED.en
-gunzip ${data_dir}/OpenSubtitles2018.de.gz --stdout  | scripts/lowercase.perl | filter de > ${data_dir}/OpenSubtitles.de
-gunzip ${data_dir}/OpenSubtitles2018.en.gz --stdout  | scripts/lowercase.perl | filter en > ${data_dir}/OpenSubtitles.en
-
-scripts/apply_bpe.py -i ${data_dir}/TED.en -o ${data_dir}/TED.jsub.en -c ${data_dir}/bpe.joint.en
-scripts/apply_bpe.py -i ${data_dir}/OpenSubtitles.de -o ${data_dir}/OpenSubtitles.jsub.de -c ${data_dir}/bpe.joint.de
+gunzip ${data_dir}/TED2013.en.gz --stdout | scripts/moses/lowercase.perl | filter en > ${data_dir}/TED.en
+rm ${data_dir}/TED2013.en.gz
+#gunzip ${data_dir}/OpenSubtitles2018.de.gz --stdout  | scripts/moses/lowercase.perl | filter de > ${data_dir}/OpenSubtitles.de
+#gunzip ${data_dir}/OpenSubtitles2018.en.gz --stdout  | scripts/moses/lowercase.perl | filter en > ${data_dir}/OpenSubtitles.en

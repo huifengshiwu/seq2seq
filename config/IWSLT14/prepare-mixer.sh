@@ -2,10 +2,10 @@
 
 # Script downloaded from: https://github.com/facebookresearch/MIXER
 
-TOKENIZER=scripts/tokenizer.perl
-UNESCAPE=scripts/unescape-special-chars.perl
-LC=scripts/lowercase.perl
-CLEAN=scripts/clean-corpus-n.perl
+TOKENIZER=scripts/moses/tokenizer.perl
+UNESCAPE=scripts/moses/unescape-special-chars.perl
+LC=scripts/moses/lowercase.perl
+CLEAN=scripts/moses/clean-corpus-n.perl
 
 URL="http://wit3.fbk.eu/archive/2014-01/texts/de/en/de-en.tgz"
 GZ=de-en.tgz
@@ -21,7 +21,6 @@ mkdir -p $orig $tmp $prep
 
 echo "Downloading data from ${URL}..."
 cd $orig
-#http_proxy=fwdproxy:8080 https_proxy=fwdproxy:8080
 wget "$URL"
 
 if [ -f $GZ ]; then
@@ -73,7 +72,6 @@ for l in $src $tgt; do
     done
 done
 
-
 echo "creating train, valid, test..."
 for l in $src $tgt; do
     awk '{if (NR%23 == 0)  print $0; }' $tmp/train.tags.de-en.$l > $prep/valid.de-en.$l
@@ -87,5 +85,3 @@ for l in $src $tgt; do
         > $prep/test.de-en.$l
 done
 
-#echo "binarizing train, valid, test..."
-#th makedata.lua -dstDir data -srcDir prep

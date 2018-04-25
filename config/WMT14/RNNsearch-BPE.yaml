@@ -1,0 +1,45 @@
+label: "RNNsearch + BPE"
+description: "Same config as RNNsearch (Bahdanau 2014), with Adam, a Cond-GRU decoder and BPE units"
+
+cell_size: 1000
+attn_size: 1000
+embedding_size: 620
+cell_type: GRU
+
+data_dir: data/WMT14
+max_len: 60
+model_dir: models/WMT14/RNNsearch_BPE
+max_train_size: 1000000
+
+steps_per_checkpoint: 10000
+steps_per_eval: 10000
+keep_best: 1
+max_to_keep: 1
+score_function: corpus_bleu
+
+optimizer: adam
+learning_rate: 0.0002
+batch_size: 80
+batch_mode: standard
+read_ahead: 20
+max_gradient_norm: 1.0
+max_epochs: 5
+learning_rate_decay_factor: 0.5
+decay_every_n_epoch: 0.5
+
+attention_type: global
+final_state: last_both
+
+weight_scale: 0.01
+
+encoders:
+  - name: joint
+    ext: jsub.en
+
+decoders:
+  - name: joint
+    ext: jsub.fr
+    conditional_rnn: True
+    pred_deep_layer: True
+
+orthogonal_init: True

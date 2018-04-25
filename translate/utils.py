@@ -441,10 +441,9 @@ def read_binary_features(filename, from_position=None):
     """
     Reads a binary file containing vector features. First two (int32) numbers correspond to
     number of entries (lines), and dimension of the vectors.
-    Each entry starts with a 32 bits integer indicating the number of frames, followed by
-    (frames * dimension) 32 bits floats.
+    Each entry is a numpy array of shape (nframes, dim).
 
-    Use `scripts/extract-audio-features.py` to create such a file for audio (MFCCs).
+    Use `scripts/speech/extract-audio-features.py` or `scripts/speech/extract.py` to create such a file for audio (MFCCs).
 
     :param filename: path to the binary file containing the features
     :return: list of arrays of shape (frames, dimension)
@@ -452,21 +451,13 @@ def read_binary_features(filename, from_position=None):
     all_feats = []
 
     with open(filename, 'rb') as f:
-        lines, dim = struct.unpack('ii', f.read(8))
+        lines, dim = np.load(f)
         if from_position is not None:
             f.seek(from_position)
 
-        while True:
-            x = f.read(4)
-            if len(x) < 4:
-                break
-            frames, = struct.unpack('i', x)
-            n = frames * dim
-            x = f.read(4 * n)
-            if len(x) < 4 * n:
-                break
-            feats = struct.unpack('f' * n, x)
-            yield list(np.array(feats).reshape(frames, dim)), f.tell()
+        for _ in range(lines):
+            feats = np.load(f)
+            yield list(feats), f.tell()
 
 
 def read_lines(paths, binary=None):

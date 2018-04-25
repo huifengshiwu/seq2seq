@@ -1,0 +1,42 @@
+label: 'IWSLT14 BPE to character Model + Monolingual data'
+
+cell_size: 512
+attn_size: 512
+embedding_size: 128
+
+cell_type: LSTM
+weight_scale: 0.1
+
+data_dir: data/IWSLT14
+model_dir: models/IWSLT14/BPE2char_TED
+train_prefix: train.TED
+
+batch_size: 32
+
+steps_per_checkpoint: 4000
+steps_per_eval: 4000
+score_function: corpus_scores
+
+max_gradient_norm: 1.0
+batch_mode: standard
+read_ahead: 20
+max_steps: 800000
+keep_best: 4
+
+encoders:
+  - name: jsub.de
+    max_len: 52
+    train_initial_states: False
+
+decoders:
+  - name: char.en
+    max_len: 239
+    character_level: True
+    conditional_rnn: True
+    pred_deep_layer: True
+    use_previous_word: False
+    initial_state: zero
+
+use_dropout: True
+rnn_input_dropout: 0.4
+word_dropout: 0.2

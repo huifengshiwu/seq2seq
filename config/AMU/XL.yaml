@@ -1,0 +1,55 @@
+label: "ENCDEC-MCGRU"
+description: "AMU 2017 Multi-Encoder Cond-GRU Model - 4M + 500k + 12k train set"
+
+cell_size: 1024
+attn_size: 2048
+embedding_size: 512
+cell_type: GRU
+
+data_dir: data/AMU
+max_len: 50
+model_dir: models/AMU/XL
+train_prefix: train.XL
+vocab_prefix: vocab.XL
+dev_prefix: dev.XL
+
+steps_per_checkpoint: 10000
+steps_per_eval: 10000
+score_function: corpus_scores_ter
+keep_best: 8
+
+optimizer: adam
+learning_rate: 0.0001
+batch_size: 64
+batch_mode: standard
+read_ahead: 100
+max_gradient_norm: 1.0
+max_epochs: 12
+
+attention_type: global
+final_state: average
+
+weight_scale: 0.01
+
+use_dropout: True
+pervasive_dropout: True
+rnn_input_dropout: 0.2
+rnn_output_dropout: 0.2
+attn_dropout: 0.2
+word_dropout: 0.2
+initial_state_dropout: 0.2
+
+train_initial_states: False
+
+encoders:
+  - name: mt
+  - name: src
+
+decoders:
+  - name: pe
+    conditional_rnn: True
+    pred_deep_layer: True
+
+ref_ext: pe.ref
+
+post_process_script: config/AMU/post-process.sh

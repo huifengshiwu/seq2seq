@@ -22,8 +22,8 @@ src_ext=$5
 trg_ext=$6
 lm_corpus=${data_dir}/$7
 lm_order=$8
-
-cores=`lscpu | grep "^CPU(s):" | sed "s/CPU(s):\\s*//"`
+#cores=`lscpu | grep "^CPU(s):" | sed "s/CPU(s):\\s*//"`
+cores=16
 
 ${MOSES}/bin/lmplz -o ${lm_order} --discount_fallback < ${lm_corpus}.${trg_ext} > ${lm_corpus}.${trg_ext}.arpa
 
@@ -42,3 +42,4 @@ ${MOSES}/bin/moses ${model_dir}/model/moses.ini --mertdir ${MOSES}/bin/ \
 
 mv ${model_dir}/mert-work/moses.ini ${model_dir}/moses.tuned.ini
 rm -rf ${model_dir}/mert-work
+

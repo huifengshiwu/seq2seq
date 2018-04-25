@@ -218,14 +218,14 @@ def split_corpus(filenames, sizes):
 
 
 def create_subwords(filename, output_filename, size):
-    cmd = ['scripts/learn_bpe.py', '--input', filename, '-s', str(size), '--output', output_filename]
+    cmd = ['scripts/bpe/learn_bpe.py', '--input', filename, '-s', str(size), '--output', output_filename]
     subprocess.call(cmd)
 
 
 def apply_subwords(filename, bpe_filename):
     with open_temp_files(num=1) as output_:
         output_, = output_
-        cmd = ['scripts/apply_bpe.py', '--input', filename, '--codes', bpe_filename]
+        cmd = ['scripts/bpe/apply_bpe.py', '--input', filename, '--codes', bpe_filename]
         subprocess.call(cmd, stdout=output_)
 
         return output_.name
@@ -354,7 +354,7 @@ if __name__ == '__main__':
     parser.add_argument('--dev-corpus', help='input development corpus')
     parser.add_argument('--test-corpus', help='input test corpus')
 
-    parser.add_argument('--scripts', help='path to script directory', default='scripts')
+    parser.add_argument('--scripts', help='path to script directory', default='scripts/moses')
 
     parser.add_argument('--dev-size', type=int,
                         help='size of development corpus', default=0)

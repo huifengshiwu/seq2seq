@@ -1,0 +1,46 @@
+label: 'LibriSpeech MT'
+description: "Character-Level Machine Translation on LibriSpeech"
+
+data_dir: data/LibriSpeech
+model_dir: models/LibriSpeech/MT
+max_train_size: 20000
+train_prefix: train+google
+
+batch_size: 64
+weight_scale: null
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 100000
+score_function: corpus_scores_bleu
+
+cell_size: 512
+attn_size: 512
+cell_type: LSTM
+
+encoders:
+  - name: sub.en
+    embedding_size: 256
+    max_len: 60
+    bidir_projection: True
+    final_state: average
+    train_initial_states: True
+    embedding_dropout: 0.2
+
+decoders:
+  - name: char.fr
+    conditional_rnn: True
+    pred_deep_layer: True
+    character_level: True
+    use_previous_word: True
+    deep_layer_size: 512
+    embedding_size: 128
+    max_len: 400
+    word_dropout: 0.2
+
+use_dropout: True
+pervasive_dropout: True
+attn_dropout: 0.2
+rnn_input_dropout: 0.2
+rnn_output_dropout: 0.2
+initial_state_dropout: 0.2

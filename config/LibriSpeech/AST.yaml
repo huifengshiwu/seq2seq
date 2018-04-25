@@ -1,0 +1,53 @@
+label: 'LibriSpeech AST'
+description: "Character-Level Automatic Speech Translation on LibriSpeech"
+
+data_dir: data/LibriSpeech
+model_dir: models/LibriSpeech/AST
+max_train_size: 20000
+train_prefix: train+google
+
+batch_size: 32
+weight_scale: null
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 500000
+score_function: corpus_scores_bleu
+
+cell_size: 512
+attn_size: 512
+cell_type: LSTM
+
+encoders:
+  - name: speech.en
+    ext: npz
+    embedding_size: 41
+    layers: 3
+    cell_size: 256
+    conv_filters: [16, 16]
+    conv_size: [3, 3]
+    conv_strides: [2, 2]
+    conv_activation: null
+    binary: True
+    max_len: 1400
+    input_layers: [256, 128]
+    bidir_projection: False
+    final_state: average
+    train_initial_states: False
+    input_layer_dropout: 0.2
+
+decoders:
+  - name: char.fr
+    conditional_rnn: True
+    pred_deep_layer: True
+    character_level: True
+    use_previous_word: True
+    deep_layer_size: 512
+    embedding_size: 128
+    max_len: 300
+
+use_dropout: True
+pervasive_dropout: True
+attn_dropout: 0.2
+rnn_input_dropout: 0.2
+initial_state_dropout: 0.2

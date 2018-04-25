@@ -1,0 +1,51 @@
+label: 'BTEC AST'
+
+data_dir: data/BTEC
+model_dir: models/BTEC/AST
+train_prefix: train.concat
+max_train_size: 40000
+
+batch_size: 64
+weight_scale: null
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 100000
+score_function: corpus_scores
+
+cell_size: 256
+attn_size: 256
+cell_type: LSTM
+
+encoders:
+  - name: speech.fr
+    ext: npz
+    embedding_size: 41
+    layers: 3
+    conv_filters: [16, 16]
+    conv_size: [3, 3]
+    conv_strides: [2, 2]
+    conv_activation: null
+    binary: True
+    max_len: 600
+    input_layers: [256, 128]
+    bidir_projection: True
+    final_state: concat_last
+    train_initial_states: False
+    input_layer_dropout: 0.4
+
+decoders:
+  - name: char.en
+    embedding_size: 64
+    max_len: 120
+    conditional_rnn: True
+    pred_maxout_layer: False
+    use_previous_word: False
+    pred_embed_proj: False
+    character_level: True
+
+use_dropout: True
+pervasive_dropout: True
+attn_dropout: 0.4
+rnn_input_dropout: 0.4
+initial_state_dropout: 0.4

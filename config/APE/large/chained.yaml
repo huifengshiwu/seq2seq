@@ -1,0 +1,58 @@
+
+cell_size: 128
+attn_size: 128
+embedding_size: 128
+cell_type: LSTM
+
+weight_scale: 0.1
+
+data_dir: data/APE
+model_dir: models/APE/large/chained
+train_prefix: train.large
+vocab_prefix: vocab.large
+
+batch_size: 32
+
+optimizer: sgd
+learning_rate: 1.0
+learning_rate_decay_factor: 0.8
+decay_every_n_epoch: 0.5
+decay_after_n_epoch: 1
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+score_function: corpus_scores_ter
+
+max_gradient_norm: 1.0
+max_steps: 200000
+
+final_state: average
+pred_embed_proj: False
+
+encoders:
+  - name: mt
+    attention_type: local
+    attn_window_size: 0
+    max_len: 40
+
+  - name: src
+    attention_type: global
+    max_len: 40
+
+decoders:
+  - name: edits
+    max_len: 50
+
+pred_edits: True
+ref_ext: pe
+
+use_dropout: True
+pervasive_dropout: True
+rnn_input_dropout: 0.5
+initial_state_dropout: 0.5
+
+chained_encoders: True
+chaining_strategy: map_attns
+chaining_non_linearity: True
+chaining_loss_ratio: 0.5
+chaining_stop_gradient: False

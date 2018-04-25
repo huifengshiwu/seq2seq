@@ -41,11 +41,14 @@ if args.compact:
     for filename in files:
         shutil.copy(os.path.join(args.model_dir, filename), args.dest_dir)
     for dirname in dirs:
-        shutil.copytree(os.path.join(args.model_dir, dirname), os.path.join(args.dest_dir, dirname))
+        try:
+            shutil.copytree(os.path.join(args.model_dir, dirname), os.path.join(args.dest_dir, dirname))
+        except:
+            pass
 
     checkpoint_dir = os.path.join(args.model_dir, 'checkpoints')
     for filename in os.listdir(checkpoint_dir):
-        if filename.startswith('best.') or filename in ('vars.pkl', 'scores.txt'):
+        if filename.startswith('best.') or filename.startswith('average.') or filename in ('vars.pkl', 'scores.txt'):
             shutil.copy(os.path.join(checkpoint_dir, filename),
                         os.path.join(args.dest_dir, 'checkpoints'))
 

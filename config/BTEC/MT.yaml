@@ -1,0 +1,44 @@
+label: 'BTEC MT'
+
+data_dir: data/BTEC
+model_dir: models/BTEC/MT
+
+batch_size: 64
+weight_scale: null
+embedding_weight_scale: 0.1
+embedding_initializer: uniform
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 100000
+score_function: corpus_scores
+
+cell_size: 256
+attn_size: 256
+cell_type: LSTM
+
+encoders:
+  - name: fr
+    embedding_size: 128
+    max_len: 25
+    bidir_projection: True
+    final_state: average
+    train_initial_states: False
+    embedding_dropout: 0.2
+
+decoders:
+  - name: char.en
+    embedding_size: 64
+    max_len: 120
+    conditional_rnn: True
+    pred_maxout_layer: False
+    use_previous_word: False
+    pred_embed_proj: False
+    character_level: True
+    word_dropout: 0.2
+
+use_dropout: True
+attn_dropout: 0.2
+rnn_input_dropout: 0.2
+initial_state_dropout: 0.2
+rnn_output_dropout: 0.2

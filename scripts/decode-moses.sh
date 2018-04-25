@@ -18,8 +18,8 @@ config_file=`readlink -f $1`
 temp_dir=`readlink -f $2`
 filename=`readlink -f $3`
 output_filename=$4
-
-cores=`lscpu | grep "^CPU(s)\|Processeur(s)" | sed "s/\(CPU(s):\|Processeur(s).:\)\\s*//"`
+#cores=`lscpu | grep "^CPU(s)\|Processeur(s)" | sed "s/\(CPU(s):\|Processeur(s).:\)\\s*//"`
+cores=16
 
 if [ -d "${temp_dir}" ]
 then
@@ -33,3 +33,4 @@ ${MOSES}/scripts/training/filter-model-given-input.pl ${temp_dir}/model ${config
 cat ${filename} | sed "s/|//g" | ${MOSES}/bin/moses -f ${temp_dir}/model/moses.ini -threads ${cores} > ${output_filename} 2>/dev/null
 rm -rf ${temp_dir}
 printf "finished: "; date
+

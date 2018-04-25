@@ -1,0 +1,67 @@
+label: 'BTEC Multi-Task'
+description: "Multi-Task training of AST, MT and ASR models on BTEC, with a joint training loss"
+
+data_dir: data/BTEC
+model_dir: models/BTEC/AST_multitask_joint
+train_prefix: train.concat
+max_train_size: 40000
+
+batch_size: 64
+weight_scale: null
+
+steps_per_checkpoint: 1000
+steps_per_eval: 1000
+max_steps: 100000
+score_function: corpus_scores
+
+train_initial_states: False
+bidir_projection: True
+pred_embed_proj: False
+use_previous_word: False
+pred_deep_layer: False
+pred_maxout_layer: False
+
+cell_size: 256
+attn_size: 256
+cell_type: LSTM
+embedding_size: 64
+
+multi_task: True
+task_ratios: [0.6, 0.2, 0.2, 0]  # (0,0) (0,1) (1,0) (1,1)
+
+encoders:
+  - name: speech.fr
+    ext: npz
+    embedding_size: 41
+    layers: 3
+    binary: True
+    final_state: concat_last
+    conv_filters: [16, 16]
+    conv_size: [3, 3]
+    conv_strides: [2, 2]
+    conv_activation: null
+    input_layers: [256, 128]
+    input_layer_activation: tanh
+    max_len: 600
+  - name: fr
+    embedding_size: 128
+    conv_filters: null
+    input_layers: null
+    max_len: 25
+    final_state: average
+decoders:
+  - name: char.en
+    character_level: True
+    conditional_rnn: True
+    max_len: 120
+  - name: char.fr
+    layers: 2
+    character_level: True
+    max_len: 140
+
+use_dropout: True
+pervasive_dropout: True
+attn_dropout: 0.4
+rnn_input_dropout: 0.4
+initial_state_dropout: 0.4
+input_layer_dropout: 0.4

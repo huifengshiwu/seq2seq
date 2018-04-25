@@ -29,3 +29,4 @@ python3 -c "print('\n'.join(line.rstrip() for line in open('${data_dir}/${corpus
 
 rm -rf fast_align-master
 rm ${data_dir}/${corpus}.en-fr
+rm ${data_dir}/*.align

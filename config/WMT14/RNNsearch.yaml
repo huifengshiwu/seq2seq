@@ -1,0 +1,42 @@
+label: "RNNsearch"
+description: "Baseline WMT14 model, exact same config as Bahdanau et al. 2014"
+
+cell_size: 1000
+attn_size: 1000
+embedding_size: 620
+cell_type: GRU
+
+data_dir: data/WMT14
+max_len: 50
+model_dir: models/WMT14/RNNsearch
+max_train_size: 1000000
+
+steps_per_checkpoint: 10000
+steps_per_eval: 10000
+keep_best: 1
+max_to_keep: 1
+score_function: corpus_bleu
+
+optimizer: adadelta
+learning_rate: 1.0
+batch_size: 80
+batch_mode: standard
+shuffle: False
+read_ahead: 20
+max_gradient_norm: 1.0
+max_epochs: 10
+
+attention_type: global
+final_state: last
+
+weight_scale: 0.01
+
+encoders:
+  - name: en
+    train_initial_states: False
+
+decoders:
+  - name: fr
+
+generate_first: False
+orthogonal_init: True
