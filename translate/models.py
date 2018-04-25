@@ -6,6 +6,7 @@ from translate.rnn import get_state_size
 from translate.beam_search import get_weights
 from translate import utils, beam_search
 from translate.conv_lstm import BasicConvLSTMCell
+from itertools import product
 
 
 def auto_reuse(fun):
@@ -85,7 +86,8 @@ def multi_encoder(encoder_inputs, encoders, encoder_input_length, other_inputs=N
         else:
             initializer = tf.random_normal_initializer(stddev=weight_scale)
 
-        with tf.device('/cpu:0'):  # embeddings can take a very large amount of memory, so
+        device = None if encoder.embeddings_on_gpu else '/cpu:0'
+        with tf.device(device):  # embeddings can take a very large amount of memory, so
             # storing them in GPU memory can be impractical
             if encoder.binary:
                 embeddings = None  # inputs are token ids, which need to be mapped to vectors (embeddings)
@@ -503,7 +505,7 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
             vp = get_variable('vp', [state_size, 1])
 
             pos = tf.nn.sigmoid(tf.matmul(tf.nn.tanh(tf.matmul(state, wp)), vp))
-            pos = tf.floor(encoder_input_length * pos)
+            pos = encoder_input_length * pos
             pos = tf.reshape(pos, [-1, 1])
             pos = tf.minimum(pos, encoder_input_length - 1)
 
@@ -513,24 +515,22 @@ def local_attention(state, hidden_states, encoder, encoder_input_length, pos=Non
             low = pos - encoder.attn_window_size
             high = pos + encoder.attn_window_size
 
-            mlow = tf.to_float(idx < low)
-            mhigh = tf.to_float(idx > high)
-            m = mlow + mhigh
-            m += tf.to_float(idx >= encoder_input_length)
-
-            mask = tf.to_float(tf.equal(m, 0.0))
-
-            e = compute_energy(hidden_states, state, encoder, input_length=encoder_input_length, **kwargs)
-            weights = softmax(e, mask=mask)
+            mask = tf.sequence_mask(encoder_input_length_, maxlen=tf.shape(hidden_states)[1], dtype=tf.float32)
 
             if encoder.attn_window_size > 0:
-                sigma = encoder.attn_window_size / 2
-                numerator = -tf.pow((idx - pos), tf.convert_to_tensor(2, dtype=tf.float32))
-                div = tf.truediv(numerator, 2 * sigma ** 2)
+                e = compute_energy(hidden_states, state, encoder, input_length=encoder_input_length_, **kwargs)
+                e -= tf.reduce_max(e, axis=1, keep_dims=True)
+                exp = tf.exp(e) * mask
+                weights = exp / tf.reduce_sum(exp, axis=-1, keep_dims=True)
+                weights_ = weights
 
+                sigma = encoder.attn_window_size / 2.0
+                div = -tf.pow((idx - pos), 2.0) / (2 * sigma ** 2)
                 weights *= tf.exp(div)  # result of the truncated normal distribution
                 # normalize to keep a probability distribution
                 # weights /= (tf.reduce_sum(weights, axis=1, keep_dims=True) + 10e-12)
+            else:
+                weights = mask  # FIXME (mask is not differentiable)
 
             weighted_average = tf.reduce_sum(tf.expand_dims(weights, axis=2) * hidden_states, axis=1)
 
@@ -640,7 +640,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, encoders,
     else:
         initializer = tf.random_normal_initializer(stddev=weight_scale)
 
-    with tf.device('/cpu:0'):
+    device = None if decoder.embeddings_on_gpu else '/cpu:0'
+    with tf.device(device):
         embedding = get_variable('embedding_{}'.format(decoder.name), shape=embedding_shape, initializer=initializer)
 
     input_shape = tf.shape(decoder_inputs)
@@ -1040,7 +1041,7 @@ def encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, 
 
     losses = [xent_loss, reinforce_loss, baseline_loss_]
 
-    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
+    return losses, [outputs], attention_weights, samples, beam_fun, initial_data
 
 
 def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
@@ -1091,7 +1092,7 @@ def reconstruction_encoder_decoder(encoders, decoders, encoder_inputs, targets, 
 
     attention_weights = [attention_weights, reconstructed_weights]
     losses = [xent_loss, None, None]
-    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
+    return losses, [outputs], attention_weights, samples, beam_fun, initial_data
 
 
 def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous,
@@ -1122,7 +1123,7 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
     pad = tf.ones(shape=tf.stack([batch_size, 1]), dtype=tf.int32) * utils.BOS_ID
     decoder_inputs = tf.concat([pad, decoder_inputs], axis=1)
 
-    outputs, _, states, attns, _, _, _ = attention_decoder(
+    outputs, attention_weights_1, states, attns, _, _, _ = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state, decoder_inputs=decoder_inputs,
         encoder_input_length=encoder_input_length[1:], **parameters
     )
@@ -1181,10 +1182,10 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
         attention_states[0] += x
 
-    outputs, attention_weights, _, _, samples, beam_fun, initial_data = attention_decoder(
+    outputs, attention_weights_2, _, _, samples, beam_fun, initial_data = attention_decoder(
         attention_states=attention_states, initial_state=encoder_state,
         feed_previous=feed_previous, decoder_inputs=targets[:,:-1],
-        align_encoder_id=align_encoder_id, encoder_input_length=encoder_input_length[:1],
+        align_encoder_id=0, encoder_input_length=encoder_input_length[:1],
         **parameters
     )
 
@@ -1196,7 +1197,69 @@ def chained_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_pr
 
     losses = [xent_loss, None, None]
 
-    return losses, [outputs], encoder_state, attention_states, attention_weights, samples, beam_fun, initial_data
+    if align_encoder_id == 0:
+        attention_weights = attention_weights_2
+    elif align_encoder_id == 2:
+        attention_weights = tf.matmul(attention_weights_2, attention_weights_1)
+    else:
+        attention_weights = attention_weights_1
+
+    return losses, [outputs], attention_weights, samples, beam_fun, initial_data
+
+
+def multi_task_encoder_decoder(encoders, decoders, encoder_inputs, targets, feed_previous, encoder_input_length=None,
+                               feed_argmax=True, training=True, task_ratios=None, **kwargs):
+    if encoder_input_length is None:
+        encoder_input_length = []
+        for encoder_inputs_ in encoder_inputs:
+            mask = get_weights(encoder_inputs_, utils.EOS_ID, include_first_eos=True)
+            encoder_input_length.append(tf.to_int32(tf.reduce_sum(mask, axis=1)))
+
+    outputs = []
+    attention_weights = []
+    beam_fun = []
+    initial_data = []
+
+    xent_loss = 0
+
+    tasks = list(product(range(len(encoders)), range(len(decoders))))
+    for i, (encoder_id, decoder_id) in enumerate(tasks):
+        if not task_ratios:
+            ratio = 1.0 / len(tasks)
+        else:
+            ratio = task_ratios[i]
+
+        if ratio == 0:
+            continue
+
+        encoders_ = [encoders[encoder_id]]
+        decoder = decoders[decoder_id]
+        encoder_inputs_ = [encoder_inputs[encoder_id]]
+        encoder_input_length_ = [encoder_input_length[encoder_id]]
+        targets_ = targets[decoder_id]
+
+        parameters = dict(encoders=encoders_, decoder=decoder, encoder_inputs=encoder_inputs_,
+                          feed_argmax=feed_argmax, training=training)
+
+        attention_states_, encoder_state_, encoder_input_length_ = multi_encoder(
+            encoder_input_length=encoder_input_length_, **parameters)
+
+        outputs_, attention_weights_, _, _, samples_, beam_fun_, initial_data_ = attention_decoder(
+            attention_states=attention_states_, initial_state=encoder_state_, feed_previous=feed_previous,
+            decoder_inputs=targets_[:, :-1], align_encoder_id=0, encoder_input_length=encoder_input_length_,
+            **parameters
+        )
+
+        trg_mask = get_weights(targets_[:, 1:], utils.EOS_ID, include_first_eos=True)
+        xent_loss_ = sequence_loss(logits=outputs_, targets=targets_[:, 1:], weights=trg_mask)
+        xent_loss += ratio * xent_loss_
+        outputs.append(outputs_)
+        attention_weights.append(attention_weights_)
+        beam_fun.append(beam_fun_)
+        initial_data.append(initial_data_)
+
+    losses = [xent_loss, None, None]
+    return losses, [outputs[0]], attention_weights[0], None, beam_fun[0], initial_data[0]
 
 
 def softmax(logits, dim=-1, mask=None):

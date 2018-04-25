@@ -65,6 +65,84 @@ def log_softmax(x, axis, temperature=None):
     return x - (tf.log(tf.reduce_sum(tf.exp(x/T - my_max), axis, keep_dims=True)) + my_max)
 
 
+def softmax(e, temperature=None):
+    e -= tf.reduce_max(e, axis=-1, keep_dims=True)
+    T = temperature or 1.0
+    exp = tf.exp(e / T)
+    y = tf.reduce_sum(exp, axis=-1, keep_dims=True)
+    weights = exp / tf.clip_by_value(y, 10e-37, 10e+37)
+    return weights
+
+
+def random_sampling(update_funs, initial_states, sequence_length, beam_size, temperature=None, parallel_iterations=16,
+                    swap_memory=True):
+    batch_size = tf.shape(initial_states[0])[0]
+
+    state_sizes = [tf.shape(state)[1] for state in initial_states]
+    states = []
+    for initial_state in initial_states:
+        state = tf.tile(tf.expand_dims(initial_state, axis=1), [1, beam_size, 1])
+        states.append(state)
+    states = tf.concat(states, axis=2)
+
+    scores = tf.concat([
+        tf.ones(shape=[batch_size, 1]),
+        tf.zeros(shape=[batch_size, beam_size - 1])], axis=1)
+    scores = tf.log(scores)
+
+    ids = tf.tile([[utils.BOS_ID]], [batch_size, beam_size])
+    hypotheses = tf.expand_dims(ids, axis=2)
+    time = tf.constant(0, dtype=tf.int32, name='time')
+
+    def time_step(time, hypotheses, states, token_ids):
+        token_ids = tf.reshape(token_ids, [batch_size * beam_size])
+        token_scores = tf.zeros([batch_size, beam_size, 1])
+
+        new_states = []
+        states = tf.split(states, num_or_size_splits=len(initial_states), axis=2)
+
+        for k, (state, state_size, update_fun) in enumerate(zip(states, state_sizes, update_funs)):
+            state = tf.reshape(state, [batch_size * beam_size, state_size])
+
+            scope = tf.get_variable_scope() if len(update_funs) == 1 else 'model_{}'.format(k + 1)
+            with tf.variable_scope(scope, reuse=True):
+                state, logits = update_fun(state, token_ids, time)
+
+            new_states.append(state)
+
+            num_classes = tf.shape(logits)[1]
+            logits = tf.reshape(logits, [batch_size, beam_size, num_classes])
+            token_scores += tf.log(softmax(logits, temperature))
+
+        fn = lambda x: tf.multinomial(x, num_samples=1)
+        indices = tf.map_fn(fn, tf.transpose(token_scores, [1, 0, 2]), dtype=tf.int64)
+        indices = tf.to_int32(indices)
+        indices = tf.squeeze(indices, axis=2)
+        indices = tf.transpose(indices, [1, 0])
+
+        hypotheses = tf.concat([hypotheses, tf.expand_dims(indices, axis=2)], axis=2)
+        states = tf.concat([tf.expand_dims(state, axis=2) for state in new_states], axis=2)
+        return time + 1, hypotheses, states, indices
+
+    loop_vars = [time, hypotheses, states, ids]
+    shapes = [tf.TensorShape([None] * len(var.shape)) for var in loop_vars]
+
+    def cond(time, *_):
+        return time < sequence_length
+
+    _, hypotheses, states, ids = tf.while_loop(
+        cond=cond,
+        body=time_step,
+        loop_vars=loop_vars,
+        shape_invariants=shapes,
+        parallel_iterations=parallel_iterations,
+        swap_memory=swap_memory)
+
+    hypotheses = hypotheses[:, :, 1:]  # remove BOS symbol
+
+    return hypotheses, scores
+
+
 def rnn_beam_search(update_funs, initial_states, sequence_length, beam_size, len_normalization=None,
                     temperature=None, parallel_iterations=16, swap_memory=True):
     """

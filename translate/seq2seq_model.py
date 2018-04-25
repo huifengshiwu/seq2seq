@@ -13,11 +13,13 @@ from collections import namedtuple
 class Seq2SeqModel(object):
     def __init__(self, encoders, decoders, learning_rate, global_step, max_gradient_norm, use_dropout=False,
                  freeze_variables=None, feed_previous=0.0, optimizer='sgd', decode_only=False,
-                 len_normalization=1.0, name=None, chained_encoders=False, pred_edits=False, baseline_step=None,
-                 use_baseline=True, reverse_input=False, reconstruction_decoders=False, **kwargs):
+                 len_normalization=1.0, name=None, chained_encoders=False, baseline_step=None,
+                 use_baseline=True, reverse_input=False, reconstruction_decoders=False, multi_task=False,
+                 **kwargs):
         self.encoders = encoders
         self.decoders = decoders
         self.temperature = self.decoders[0].temperature
+        self.pred_edits = decoders[0].pred_edits
 
         self.name = name
 
@@ -77,18 +79,19 @@ class Seq2SeqModel(object):
 
         if reconstruction_decoders:
             architecture = models.reconstruction_encoder_decoder
-        elif chained_encoders and pred_edits:
-             architecture = models.chained_encoder_decoder    # no REINFORCE for now
+        elif chained_encoders and self.pred_edits:
+            architecture = models.chained_encoder_decoder    # no REINFORCE for now
+        elif multi_task:
+            architecture = models.multi_task_encoder_decoder
         else:
-             architecture = models.encoder_decoder
+            architecture = models.encoder_decoder
 
         tensors = architecture(encoders, decoders, self.encoder_inputs, self.targets, self.feed_previous,
                                encoder_input_length=self.encoder_input_length, feed_argmax=self.feed_argmax,
                                rewards=self.rewards, use_baseline=use_baseline, training=self.training,
                                global_step=self.global_step, **kwargs)
 
-        (self.losses, self.outputs, self.encoder_state, self.attention_states, self.attention_weights,
-         self.samples, self.beam_fun, self.initial_data) = tensors
+        self.losses, self.outputs, self.attention_weights, self.samples, self.beam_fun, self.initial_data = tensors
 
         self.xent_loss, self.reinforce_loss, self.baseline_loss = self.losses
         self.loss = self.xent_loss   # main loss
@@ -313,7 +316,7 @@ class Seq2SeqModel(object):
                 inputs[i].append(src_sentence + encoder_pad)
                 input_length[i].append(len(src_sentence) + eos)
 
-            for i in range(len(targets)):
+            for i in range(len(self.decoders)):
                 if decoding:
                     targets[i].append([utils.BOS_ID] * self.max_output_len[i] + [utils.EOS_ID])
                 else:
