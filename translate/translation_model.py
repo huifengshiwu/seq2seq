@@ -395,6 +395,12 @@ class TranslationModel:
 
                 hypothesis_iter = self.decode_batch(src_lines, self.batch_size, remove_unk=remove_unk,
                                                     fix_edits=fix_edits, unk_replace=unk_replace)
+                if post_process_script is not None:
+                    hypotheses, raw = zip(*hypothesis_iter)
+                    data = '\n'.join(hypotheses).encode()
+                    data = Popen([post_process_script], stdout=PIPE, stdin=PIPE).communicate(input=data)[0].decode()
+                    hypotheses = data.splitlines()
+                    hypothesis_iter = zip(hypotheses, raw)
 
                 for i, hypothesis in enumerate(hypothesis_iter):
                     hypothesis, raw = hypothesis
@@ -407,11 +413,6 @@ class TranslationModel:
             finally:
                 if output_file is not None:
                     output_file.close()
-
-            if post_process_script is not None:
-                data = '\n'.join(hypotheses).encode()
-                data = Popen([post_process_script], stdout=PIPE, stdin=PIPE).communicate(input=data)[0].decode()
-                hypotheses = data.splitlines()
 
             scores_ = []
             summary = None
