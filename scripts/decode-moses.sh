@@ -18,8 +18,7 @@ config_file=`readlink -f $1`
 temp_dir=`readlink -f $2`
 filename=`readlink -f $3`
 output_filename=$4
-#cores=`lscpu | grep "^CPU(s)\|Processeur(s)" | sed "s/\(CPU(s):\|Processeur(s).:\)\\s*//"`
-cores=16
+cores=`lscpu | grep -Po "^(CPU\(s\)|Processeur\(s\)).?:\s+\K\d+$"`
 
 if [ -d "${temp_dir}" ]
 then
