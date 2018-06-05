@@ -228,7 +228,7 @@ def get_filenames(data_dir, model_dir, extensions, train_prefix, dev_prefix, voc
         test = align or dev_prefix[:1]
 
     if len(test) == 1 and not (decode and os.path.exists(test[0])):
-        corpus_path = os.path.join(data_dir, test[0])
+        corpus_path = os.path.join(data_dir, test[0]) if not os.path.dirname(test[0]) else test[0]
         test = ['{}.{}'.format(corpus_path, ext) for ext in exts]
 
     filenames = namedtuple('filenames', ['train', 'dev', 'test', 'vocab'])
