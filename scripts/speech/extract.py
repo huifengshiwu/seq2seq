@@ -3,11 +3,10 @@
 from __future__ import division
 import argparse
 import numpy as np
-import tarfile
 import yaafelib
-import struct
-import sys
-import scipy.io.wavfile as wav
+import tarfile
+import tempfile
+import os
 from collections import Counter
 
 parser = argparse.ArgumentParser()
@@ -24,6 +23,7 @@ parameters = dict(
     mfcc_filters=41  # more filters? (needs to be at least mfcc_coeffs+1, because first coeff is ignored)
 )
 
+# TODO: ensure that all input files use this rate
 fp = yaafelib.FeaturePlan(sample_rate=16000)
 
 mfcc_features = 'MFCC MelNbFilters={mfcc_filters} CepsNbCoeffs={mfcc_coeffs} ' \
@@ -50,6 +50,8 @@ engine = yaafelib.Engine()
 engine.load(df)
 afp = yaafelib.AudioFileProcessor()
 
+frame_counter = Counter()
+
 outfile = open(args.output, 'wb')
 
 total = 0
@@ -57,16 +59,19 @@ for filename in args.inputs:
     tar = tarfile.open(filename)
     total += len([f for f in tar if f.isfile()])
 
+_, tmp_file = tempfile.mkstemp()
+
 for j, filename in enumerate(args.inputs):
     tar = tarfile.open(filename)
     files = sorted([f for f in tar if f.isfile()], key=lambda f: f.name)
 
     for i, fileinfo in enumerate(files):
-        _, data = wav.read(tar.extractfile(fileinfo))
-        data = data.astype(np.float64)
-        data = np.expand_dims(data, axis=0)
+        file_ = tar.extractfile(fileinfo)
+        with open(tmp_file, 'wb') as f:
+            f.write(file_.read())
 
-        feats = engine.processAudio(data)
+        afp.processFile(engine, tmp_file)
+        feats = engine.readAllOutputs()
         feats = np.concatenate([feats[k] for k in keys], axis=1)
         frames, dim = feats.shape
 
@@ -82,3 +87,4 @@ for j, filename in enumerate(args.inputs):
         np.save(outfile, feats)
 
 outfile.close()
+os.remove(tmp_file)

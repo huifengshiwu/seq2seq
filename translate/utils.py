@@ -448,16 +448,17 @@ def read_binary_features(filename, from_position=None):
     :param filename: path to the binary file containing the features
     :return: list of arrays of shape (frames, dimension)
     """
-    all_feats = []
-
     with open(filename, 'rb') as f:
         lines, dim = np.load(f)
         if from_position is not None:
             f.seek(from_position)
 
         for _ in range(lines):
-            feats = np.load(f)
-            yield list(feats), f.tell()
+            try:
+                feats = np.load(f)
+                yield list(feats), f.tell()
+            except OSError:
+                pass
 
 
 def read_lines(paths, binary=None):
