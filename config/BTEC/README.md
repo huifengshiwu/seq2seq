@@ -7,7 +7,7 @@
 ~~~
 sudo apt-get install cmake cmake-curses-gui libargtable2-0 libargtable2-dev
 libsndfile1 libsndfile1-dev libmpg123-0 libmpg123-dev libfftw3-3 libfftw3-dev
-liblapack-dev libhdf5-serial-dev
+liblapack-dev libhdf5-serial-dev gcc-4.8 g++-4.8
 
 wget https://sourceforge.net/projects/yaafe/files/yaafe-v0.64.tgz/download -O yaafe-v0.64.tgz
 
@@ -20,6 +20,8 @@ mv src_cpp/yaafe-core/Ports.h.fixed src_cpp/yaafe-core/Ports.h
 
 mkdir build
 cd build
+export CC=/usr/bin/gcc-4.8
+export CXX=/usr/bin/g++-4.8
 cmake ..
 make
 sudo make install
