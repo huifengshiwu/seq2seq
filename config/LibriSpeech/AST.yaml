@@ -3,7 +3,7 @@ description: "Character-Level Automatic Speech Translation on LibriSpeech"
 
 data_dir: data/LibriSpeech
 model_dir: models/LibriSpeech/AST
-max_train_size: 10000
+max_train_size: 20000
 train_prefix: train+google
 
 batch_size: 32
