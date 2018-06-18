@@ -8,7 +8,7 @@ The pre-processed corpus (with MFCCs) is available [here](https://drive.google.c
 
     ./seq2seq.sh config/LibriSpeech/AST.yaml --train -v --purge
 
-If you want to do your own pre-processing, then you can use [this corpus](https://drive.google.com/open?id=1JsyqBLvsf9xm09sFTYvBR7Z2k9IJtOCi). The audio files are grouped into tar archives for convenience. The `scripts/speech/extract.py` and `scripts/speech/extract-new.py` directly take this tar archive as input, and output a numpy binary file containing the extracted features. The text files are non-processed and should be tokenized and optionally lowercased before training.
+If you want to do your own pre-processing, then you can use [this corpus](https://drive.google.com/open?id=1n6r-gkTPooK8oEWjllv1i5vO3ZWHkRNe). The audio files are grouped into tar archives for convenience. The `scripts/speech/extract.py` and `scripts/speech/extract-new.py` directly take this tar archive as input, and output a numpy binary file containing the extracted features. The text files are non-processed and should be tokenized and optionally lowercased before training.
 
 ## Trained models
 
