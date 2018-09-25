@@ -36,7 +36,7 @@ You should get similar BLEU scores as these (our model was trained on a single T
 | 25.04 | 28.64 | 29.22 | 240k  | 60h  |
 | 25.25 | 28.67 | 29.28 | 330k  | 80h  |
 
-Download this model [here](https://drive.google.com/file/d/1XM_76xP5kg8--BvykF3uJdCSYtdLFGX_/view?usp=sharing). To use this model, just extract the archive into the `seq2seq/models` folder, and run:
+Download this model [here](https://drive.google.com/file/d/1Qe4yZTYSTF-mlRlP_NTFGwXgacZnBwdp/view?usp=sharing). To use this model, just extract the archive into the `seq2seq/models` folder, and run:
 
      ./seq2seq.sh models/WMT14/config.yaml --decode -v
 
@@ -50,7 +50,7 @@ This is the same dataset as [Ranzato et al. 2015](https://arxiv.org/abs/1511.067
 |:-----:|:-----:|:-----:|:-----:|
 | 28.32 | 25.33 | 26.74 | 44k   |
 
-The model is available for download [here](https://drive.google.com/file/d/1-RZ-uNaJvn2UuQOmYEjyQl7435CCrrB6/view?usp=sharing).
+The model is available for download [here](https://drive.google.com/file/d/1qCL3ZRxZ13fC45f74Nt6qiQ8tVAYFF9H/view?usp=sharing).
 
 ## Audio pre-processing
 If you want to use the toolkit for Automatic Speech Recognition (ASR) or Automatic Speech Translation (AST), then you'll need to pre-process your audio files accordingly.
