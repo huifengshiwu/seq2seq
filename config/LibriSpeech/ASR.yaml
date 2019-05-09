@@ -40,7 +40,6 @@ decoders:
     pred_deep_layer: True
     character_level: True
     use_previous_word: True
-    deep_layer_size: 256
     embedding_size: 128
     max_len: 300
 
