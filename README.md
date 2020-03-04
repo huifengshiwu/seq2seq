@@ -1,4 +1,4 @@
-# seq2seq
+# seq2seq(ST)
 Attention-based sequence to sequence learning
 
 ## Dependencies
